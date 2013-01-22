@@ -1,4 +1,3 @@
-
 from dolfin import *
 
 # Test for PETSc or Epetra
@@ -6,6 +5,7 @@ if not has_linear_algebra_backend("PETSc") and not has_linear_algebra_backend("E
 	info("DOLFIN has not been configured with Trilinos or PETSc. Exiting.")
 	exit()
 
+parameters.linear_algebra_backend = 'uBlas'
 
 # Load mesh
 mesh = UnitSquare(24, 24)
@@ -59,17 +59,18 @@ A, bb = assemble_system(a, L, bcs)
 print A
 
 # Assemble preconditioner system
-P, btmp = assemble_system(b, L, bcs)
+#P, btmp = assemble_system(b, L, bcs)
 
 # Create Krylov solver and AMG preconditioner
-solver = KrylovSolver("tfqmr", "amg")
+#solver = KrylovSolver("tfqmr", "amg")
 
 # Associate operator (A) and preconditioner matrix (P)
-solver.set_operators(A, P)
+#solver.set_operators(A, P)
+
 
 # Solve
-U = Function(W)
-solver.solve(U.vector(), bb)
+	U = Function(W)
+	solver.solve(U.vector(), bb)
 
 # Get sub-functions
 u, p = U.split()
