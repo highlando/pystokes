@@ -4,11 +4,11 @@ import numpy as np
 
 parameters.linear_algebra_backend = "uBLAS"
 
-mesh = UnitSquareMesh(6, 6)
+mesh = UnitSquare(2, 2)
 
 
 # Define mixed FEM function spaces
-V = VectorFunctionSpace(mesh, "CG", 1)
+V = VectorFunctionSpace(mesh, "CG", 2)
 Q = FunctionSpace(mesh, "CG", 1)
 W = V * Q
 
@@ -43,21 +43,24 @@ A = assemble(aa)
 Grad = assemble(grada)
 Div = assemble(diva)
 
-fvhomo = Constant((0,0))
+fvhomo = Constant((1,2))
 fphomo = Constant((0))
 
 Lvh = inner(fvhomo,v)*dx 
 Lph = inner(fphomo,q)*dx
 
+b = assemble(Lvh)
+
 for bc in bcs:
-	bc.apply(A, Lvh)
+	bc.apply(A)
+	bc.apply(b)
 
 
-## Convert DOLFIN representation to numpy arrays
-#rows, cols, values = A.data()
-#Aa = csr_matrix((values, cols, rows))
-#ba = b.array()
-#ba = ba.reshape(len(ba), 1)
+# Convert DOLFIN representation to numpy arrays
+rows, cols, values = A.data()
+Aa = csr_matrix((values, cols, rows))
+ba = b.array()
+ba = ba.reshape(len(ba), 1)
 #	
 ## get system matrices as np.arrays
 #Aa, grada, diva = get_sysNSMats(W,bcs)

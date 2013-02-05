@@ -4,7 +4,8 @@ import numpy as np
 
 parameters.linear_algebra_backend = "uBLAS"
 
-mesh = UnitSquareMesh(3, 3)
+mesh = UnitSquare(2, 2)
+#mesh = UnitSquareMesh(3, 3)
 
 
 # Define mixed FEM function spaces
@@ -32,18 +33,18 @@ bcs = [bc0, bc1]
 u = TrialFunction(V)
 v = TestFunction(V)
 
-ga = inner(grad(u), grad(v))*dx 
+aa = inner(grad(u), grad(v))*dx 
 
 # Assemble system
-A = assemble(ga)
+A = assemble(aa)
 
-fvhomo = Constant((0,0))
+fvhomo = Constant((1,2))
 
 Lvh = inner(fvhomo,v)*dx 
 b = assemble(Lvh)
 
 for bc in bcs:
-	bc.zero(A)
+	bc.apply(A)
 	bc.apply(b)
 
 ## Convert DOLFIN representation to numpy arrays

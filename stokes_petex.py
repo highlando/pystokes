@@ -20,15 +20,15 @@ W = V * Q
 #def right(x, on_boundary): return x[0] > (1.0 - DOLFIN_EPS)
 #def left(x, on_boundary): return x[0] < DOLFIN_EPS
 def top(x, on_boundary): 
-  return x[1] > 1.0 - DOLFIN_EPS 
+	return x[1] > 1.0 - DOLFIN_EPS 
 
 def leftbotright(x, on_boundary): 
-  return ( x[0] > 1.0 - DOLFIN_EPS 
+	return ( x[0] > 1.0 - DOLFIN_EPS 
 			or x[1] < DOLFIN_EPS 
 			or x[0] < DOLFIN_EPS)
 
 
-# No-slip boundary condition for velocity
+	# No-slip boundary condition for velocity
 noslip = Constant((0.0, 0.0))
 bc0 = DirichletBC(W.sub(0), noslip, leftbotright)
 
@@ -47,7 +47,7 @@ bcs = [bc0, bc1]
 (u, p) = TrialFunctions(W)
 (v, q) = TestFunctions(W)
 #f = Expression(("x[0]"\
-#		"+x[1]","x[1]"))
+		#		"+x[1]","x[1]"))
 f = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
 		"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
 		"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
