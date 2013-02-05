@@ -4,7 +4,7 @@ import numpy as np
 
 parameters.linear_algebra_backend = "uBLAS"
 
-mixed = True
+mixed = False
 
 mesh = UnitSquare(2, 2)
 
@@ -14,10 +14,8 @@ if mixed is True:
 	Q = FunctionSpace(mesh, "CG", 1)
 	W = V * Q
 
-	#(u, p) = TrialFunctions(W)
-	#(v, q) = TestFunctions(W)
-	u = TrialFunction(W.sub(0))
-	v = TestFunction(W.sub(0))
+	(u, p) = TrialFunctions(W)
+	(v, q) = TestFunctions(W)
 
 else:
 	# Define FEM function spaces
