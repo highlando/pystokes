@@ -4,11 +4,50 @@ import numpy as np
 
 parameters.linear_algebra_backend = "uBLAS"
 
-def get_mesh_usq():
-	# Load mesh
-	return mesh = UnitSquareMesh(16, 16)
+def solve_stokesTimeDep():
 
-def set_bcs_zerosq(mesh,W):
+	# get the mesh 
+	mesh = get_mesh_usq(4)
+
+	# Define mixed FEM function spaces
+	V = VectorFunctionSpace(mesh, "CG", 2)
+	Q = FunctionSpace(mesh, "CG", 1)
+
+	velbcs = setget_velbcs_zerosq(mesh, V)
+
+	# get system matrices as np.arrays
+	Aa, grada, diva = get_sysNSmats(V, Q, velbcs)
+
+
+
+## Create Krylov solver and preconditioner
+#solver = KrylovSolver("gmres", "none")
+#solver.set_operator(A)
+#
+## Solve
+#U = Function(W)
+#solver.solve(U.vector(), b)
+#
+## Get sub-functions
+#u, p = U.split()
+#
+## Save solution in VTK format
+#ufile_pvd = File("velocity.pvd")
+#ufile_pvd << u
+#pfile_pvd = File("pressure.pvd")
+#pfile_pvd << p
+#
+## Plot solution
+#plot(u)
+#plot(p)
+#interactive()
+
+def get_mesh_usq(ndof):
+	# Load mesh
+	mesh = UnitSquareMesh(ndof, ndof)
+	return mesh
+
+def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
 	def top(x, on_boundary): 
 	  return x[1] > 1.0 - DOLFIN_EPS 
@@ -20,18 +59,18 @@ def set_bcs_zerosq(mesh,W):
 
 	# No-slip boundary condition for velocity
 	noslip = Constant((0.0, 0.0))
-	bc0 = DirichletBC(W.sub(0), noslip, leftbotright)
+	bc0 = DirichletBC(V, noslip, leftbotright)
 
 	# Boundary condition for velocity at the lid
-	lid = Constant(("0.0", "0.0"))
-	bc1 = DirichletBC(W.sub(0), lid, top)
+	lid = Constant((0.0, 0.0))
+	bc1 = DirichletBC(V, lid, top)
 
 	# Collect boundary conditions
-	bcs = [bc0, bc1]
+	velbcs = [bc0, bc1]
 
-	return bcs
+	return velbcs
 
-def get_stoksysmats( W, bcs ):
+def get_sysNSmats( V, Q, velbcs ):
 	""" Assembles the system matrices for Stokes equation
 
 	in mixed FEM formulation, namely
@@ -42,81 +81,53 @@ def get_stoksysmats( W, bcs ):
 	for a given trial and test space W = V * Q and boundary conds.
 	"""
 
-	(u, p) = TrialFunctions(W)
-	(v, q) = TestFunctions(W)
+	u = TrialFunction(V)
+	p = TrialFunction(Q)
+	v = TestFunction(V)
+	q = TestFunction(Q)
 
 	aa = inner(grad(u), grad(v))*dx 
 	grada = div(v)*p*dx
 	diva = q*div(u)*dx
 
 	# Assemble system
-	A = assemble_system(aa)
-	Grad = assemble_system(grada)
-	Div = assemble_system(diva)
+	A = assemble(aa)
+	Grad = assemble(grada)
+	Div = assemble(diva)
 
-	fvhomo = constant((0,0))
-	fphomo = constant((0))
+	fvhomo = Constant((0,0))
+	fphomo = Constant((0))
 
 	Lvh = inner(fvhomo,v)*dx 
 	Lph = inner(fphomo,q)*dx
 
-	for bc in bcs:
-		bc.apply(A, Lvh)
+	fv = assemble(Lvh)
+	fp = assemble(Lph)
 
-
-	TODO: bcs hier????
+	for bc in velbcs:
+		bc.apply(A, fv)
 
 	# Convert DOLFIN representation to numpy arrays
 	rows, cols, values = A.data()
 	Aa = csr_matrix((values, cols, rows))
-	ba = b.array()
-	ba = ba.reshape(len(ba), 1)
+
+	rows, cols, values = Grad.data()
+	BTa = csr_matrix((values, cols, rows))
+
+	rows, cols, values = Div.data()
+	Ba = csr_matrix((values, cols, rows))
+
+	rhs = fv.array()
+	rhs = rhs.reshape(len(rhs), 1)
+
+	return Aa, BTa, Ba, rhs
 	
-fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
-		"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
-		"+x[1]*(1-x[1])*(1-2*x[0])","-4*(-3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
-		"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
-		"+ x[0]*(1-x[0])*(1-2*x[1])"))
+#fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
+#		"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
+#		"+x[1]*(1-x[1])*(1-2*x[0])","-4*(-3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
+#		"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
+#		"+ x[0]*(1-x[0])*(1-2*x[1])"))
+#
 
-	L = inner(fv, v)*dx + inner(fp,q)*dx
-fp = Constant((0))
-
-
-
-def solve_stokesTimeDep():
-
-	# get the mesh 
-	mesh = get_mesh_usq()
-
-	# Define mixed FEM function spaces
-	V = VectorFunctionSpace(mesh, "CG", 2)
-	Q = FunctionSpace(mesh, "CG", 1)
-	W = V * Q
-
-	bcs = set_bcs_zerosq(mesh,W)
-
-	# get system matrices as np.arrays
-	Aa, grada, diva = get_sysNSMats(W,bcs)
-
-
-# Create Krylov solver and preconditioner
-solver = KrylovSolver("gmres", "none")
-solver.set_operator(A)
-
-# Solve
-U = Function(W)
-solver.solve(U.vector(), b)
-
-# Get sub-functions
-u, p = U.split()
-
-# Save solution in VTK format
-ufile_pvd = File("velocity.pvd")
-ufile_pvd << u
-pfile_pvd = File("pressure.pvd")
-pfile_pvd << p
-
-# Plot solution
-plot(u)
-plot(p)
-interactive()
+if __name__ == '__main__':
+	solve_stokesTimeDep()

@@ -4,9 +4,11 @@ import numpy as np
 
 parameters.linear_algebra_backend = "uBLAS"
 
-mixed = False
+mixed = True
 
 mesh = UnitSquare(2, 2)
+plot(mesh)
+
 
 if mixed is True:
 	# Define mixed FEM function spaces
