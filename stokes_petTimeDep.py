@@ -16,9 +16,9 @@ def solve_stokesTimeDep():
 	velbcs = setget_velbcs_zerosq(mesh, V)
 
 	# get system matrices as np.arrays
-	Aa, grada, diva = get_sysNSmats(V, Q, velbcs)
-
-
+	Aa, BTa, Ba = get_sysNSmats(V, Q)
+	
+	fv, fp = setget_rhs(V, Q) #, velbcs)
 
 ## Create Krylov solver and preconditioner
 #solver = KrylovSolver("gmres", "none")
@@ -70,7 +70,7 @@ def setget_velbcs_zerosq(mesh, V):
 
 	return velbcs
 
-def get_sysNSmats( V, Q, velbcs ):
+def get_sysNSmats( V, Q): # , velbcs ):
 	""" Assembles the system matrices for Stokes equation
 
 	in mixed FEM formulation, namely
@@ -95,18 +95,6 @@ def get_sysNSmats( V, Q, velbcs ):
 	Grad = assemble(grada)
 	Div = assemble(diva)
 
-	fvhomo = Constant((0,0))
-	fphomo = Constant((0))
-
-	Lvh = inner(fvhomo,v)*dx 
-	Lph = inner(fphomo,q)*dx
-
-	fv = assemble(Lvh)
-	fp = assemble(Lph)
-
-	for bc in velbcs:
-		bc.apply(A, fv)
-
 	# Convert DOLFIN representation to numpy arrays
 	rows, cols, values = A.data()
 	Aa = csr_matrix((values, cols, rows))
@@ -122,12 +110,44 @@ def get_sysNSmats( V, Q, velbcs ):
 
 	return Aa, BTa, Ba, rhs
 	
-#fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
-#		"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
-#		"+x[1]*(1-x[1])*(1-2*x[0])","-4*(-3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
-#		"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
-#		"+ x[0]*(1-x[0])*(1-2*x[1])"))
-#
+def setget_rhs(V, Q, velbcs, t=None):
+
+	if t is None:
+		fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
+				"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
+				"+x[1]*(1-x[1])*(1-2*x[0])","-4*(-3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
+				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
+				"+ x[0]*(1-x[0])*(1-2*x[1])"))
+
+	fp = Constant((0))
+
+	v = TestFunction(V)
+	q = TestFunction(Q)
+
+	fv = inner(fv,v)*dx 
+	fp = inner(fp,q)*dx
+
+	fv = assemble(fv)
+	fp = assemble(fp)
+
+	for bc in velbcs f**k f**k  :
+		bc.apply(fv)
+
+	fv = fv.array()
+	fv = fv.reshape(len(fv), 1)
+
+	fp = fp.array()
+	fp = fp.reshape(len(fp), 1)
+
+	return fv, fp
+
+	#for bc in velbcs:
+	#	bc.apply(A, fv)
+
+def condense_sysmatsbybcs(Aa=None,BTa=None,Ba=None,
+		fv=None,fp=None,velbcs):
+	"""
+
 
 if __name__ == '__main__':
 	solve_stokesTimeDep()
