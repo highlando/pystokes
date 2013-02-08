@@ -4,6 +4,7 @@
 *.py[cod]
 *.pvd
 *.vtu
+*.xml
 
 # C extensions
 *.so
