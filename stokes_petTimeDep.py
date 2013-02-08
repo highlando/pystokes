@@ -1,6 +1,7 @@
 from dolfin import *
-from scipy.sparse import csr_matrix
+#from scipy.sparse import csr_matrix
 import numpy as np
+import scipy.sparse as sps
 
 parameters.linear_algebra_backend = "uBLAS"
 
@@ -20,6 +21,8 @@ def solve_stokesTimeDep(debu=None):
 	Aa, BTa, Ba = get_sysNSmats(V, Q)
 	
 	fv, fp = setget_rhs(V, Q, velbcs)
+
+
 
 	if debu is not None:
 		return Aa, BTa, Ba, velbcs, fv, fp, mesh, V, Q
@@ -146,29 +149,28 @@ def get_sysNSmats( V, Q): # , velbcs ):
 
 	# Convert DOLFIN representation to numpy arrays
 	rows, cols, values = A.data()
-	Aa = csr_matrix((values, cols, rows))
+	Aa = sps.csr_matrix((values, cols, rows))
 
 	rows, cols, values = Grad.data()
-	BTa = csr_matrix((values, cols, rows))
+	BTa = sps.csr_matrix((values, cols, rows))
 
 	rows, cols, values = Div.data()
-	Ba = csr_matrix((values, cols, rows))
+	Ba = sps.csr_matrix((values, cols, rows))
 
 	return Aa, BTa, Ba
 	
 def setget_rhs(V, Q, velbcs, t=None):
 
-	if t is not None:
-	#	fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
-	#			"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
-	#			"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
-	#			"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
-	#			"+ x[0]*(1-x[0])*(1-2*x[1])"))
-		print 'haha'
+	if t is None:
+		fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
+				"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
+				"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
+				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
+				"+ x[0]*(1-x[0])*(1-2*x[1])"))
 	
 	
 
-	fv = Expression(("sin(x[0])","0"))
+	#fv = Expression(("sin(x[0])","0"))
 	fp = Constant((0))
 
 	v = TestFunction(V)
@@ -194,15 +196,34 @@ def setget_rhs(V, Q, velbcs, t=None):
 	#for bc in velbcs:
 	#	bc.apply(A, fv)
 
-def condense_sysmatsbybcs(Aa=None,BTa=None,Ba=None,
-		fv=None,fp=None,velbcs=None):
+def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	"""resolve the Dirichlet BCs and condense the sysmats
 
 	to the inner nodes"""
 
-	return
+	auxu = np.zeros((len(fv),1))
+	bcinds = []
+	for bc in velbcs:
+		bcdict = bc.get_boundary_values()
+		auxu[bcdict.keys(),0] = bcdict.values()
+		bcinds.extend(bcdict.keys())
 
+	print bcinds
+	
+	# accumulating the bcs to the right hand sides
+	fv = fv - Aa*auxu    # '*' is np.dot for csr matrices
+	fp = fp - Ba*auxu
+	
+	# indices of the innernodes
+	innerinds = np.setdiff1d(range(len(fv)),bcinds)
 
+	# extract the inner nodes equation coefficients
+	Ac = Aa[innerinds,:][:,innerinds]
+	fvc= fv[innerinds,:]
+	Bc = Ba[:,innerinds]
+	BTc = BTa[innerinds,:]
+
+	return Ac, BTc, Bc, fvc, fp
 
 if __name__ == '__main__':
 	solve_stokesTimeDep()
@@ -228,30 +249,3 @@ if __name__ == '__main__':
 #plot(u)
 #plot(p)
 #interactive()
-
-
-    def test_sub_dofmap(self):
-        """ Test extraction of sub- and sub-sub-dofmaps."""
-        mesh = UnitSquare(1, 1)
-        V = FunctionSpace(mesh, "CG", 1)
-        Q = VectorFunctionSpace(mesh, "CG", 1)
-        W = V * Q
-
-        for cell in cells(mesh):
-            dofs0 = numpy.array((0,)*3, dtype="I")
-            dofs1 = numpy.array((0,)*3, dtype="I")
-            dofs2 = numpy.array((0,)*3, dtype="I")
-            dofs3 = numpy.array((0,)*6, dtype="I")
-
-            W.sub(0).dofmap().tabulate_dofs(dofs0, cell)
-
-            L = W.sub(1)
-            L.sub(0).dofmap().tabulate_dofs(dofs1, cell)
-            L.sub(1).dofmap().tabulate_dofs(dofs2, cell)
-            L.dofmap().tabulate_dofs(dofs3, cell)
-
-            self.assertEqual(len(numpy.intersect1d(dofs0, dofs1)), 0)
-            self.assertEqual(len(numpy.intersect1d(dofs0, dofs2)), 0)
-            self.assertEqual(len(numpy.intersect1d(dofs1, dofs2)), 0)
-            self.assertTrue(numpy.array_equal(numpy.append(dofs1, dofs2), dofs3))
-            self.assertTrue(numpy.array_equal(numpy.append(dofs1, dofs2), dofs3))
