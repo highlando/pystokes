@@ -6,6 +6,12 @@ import scipy.sparse as sps
 parameters.linear_algebra_backend = "uBLAS"
 
 def solve_stokesTimeDep(debu=None):
+	"""function to solve
+	
+  	 	 du\dt - lap u + grad p = fv
+		         div u          = fp
+
+	"""
 
 	# get the mesh 
 	N = 2
@@ -22,24 +28,66 @@ def solve_stokesTimeDep(debu=None):
 	
 	fv, fp = setget_rhs(V, Q) #, velbcs)
 
-	Ac, BTc, Bc, fvc, fp = condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs)
+	Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
+			condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs)
 
 	###
 	# Time stepping
 	###
-	sadSysmatv = sps.hstack([Ac,Btc])
+	sadSysmatv = sps.hstack([Ac,BTc])
 	sadSysmatp = sps.hstack([Bc,sps.csr_matrix((Bc.shape[0],Bc.shape[0]))])
-	sadSysmat = sps.vstack([sadSysmatv,sadSysmatp])
+	sadSysmat = sps.vstack([sadSysmatv,sadSysmatp]).todense()
 
+	Nts, t0, tE = 20, 0, 1.
+	dt = (t0-tE)/Nts
+	u_file = File("results/velocity.pvd"),
+	p_file = File("results/pressure.pvd"),
+	# starting value
+	dimredsys = len(fvc)+len(fp)-1
+	vp_old = np.zeros((dimredsys,1))
+	iterA  = np.eye(dimredsys) - dt*sadSysmat[:-1,:-1]
+	v, p   = expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+			vp=vp_old,vc=None,pc=None)
+	u_file << v
+	p_file << p
 	for i in range(Nts):
+		tcur = tcur + dt
 		#iterateeee
-
+		iterrhs = vp_old + dt*np.vstack([fv,fp[:-1]])
+		vp_new = np.linalg.solve(iterA,iterrhs)
+		v, p = expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+				vp=vp_new,vc=None,pc=None)
+		u_file << v, tcur
+		p_file << p, tcur
 
 
 	if debu is not None:
 		return Ac, BTc, Bc, velbcs, fvc, fp, mesh, V, Q
 	else:
 		return
+
+def expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+		vp=None,vc=None,pc=None):
+	"""expand v and p to the dolfin function representation"""
+
+	v = Function(V)
+	p = Function(Q)
+
+	if vp is not None:
+		vc = vp[:V.dim()-len(bcinds),:]
+		pc = vp[V.dim()-len(bcinds):,:]
+
+	ve = np.zeros((V.dim(),1))
+
+	ve[invinds] = vc
+	ve[bcinds] = bcvals
+
+	pe = np.vstack([pc,[0]])
+
+	v.vector().set_local(ve)
+	p.vector().set_local(pe)
+
+	return v, p
 
 def get_ij_subgrid(k,N):
 	"""to get i,j numbering of the cluster centers of smaminext"""
@@ -114,7 +162,10 @@ def getmake_mesh_smaminext(N):
 def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
 	def top(x, on_boundary): 
-	  return x[1] > 1.0 - DOLFIN_EPS 
+	  return ( x[1] > 1.0 - DOLFIN_EPS
+			  and x[0] > 1.0 - DOLFIN_EPS 
+			  and x[0] < DOLFIN_EPS)
+			  
 
 	def leftbotright(x, on_boundary): 
 	  return ( x[0] > 1.0 - DOLFIN_EPS 
@@ -227,13 +278,15 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	Bc  = Ba[:,innerinds]
 	BTc = BTa[innerinds,:]
 
+	bcvals = auxu[bcinds]
+
 	# removal of the indefiniteness in pressure via pi_0 !=! 0
 	# eeeh, better not here :/
 	# Bc  = Ba[1:,innerinds]
 	# BTc = BTa[innerinds,1:]
 	# fp  = fp[1:,0]
 
-	return Ac, BTc, Bc, fvc, fp
+	return Ac, BTc, Bc, fvc, fp, bcinds, bcvals, innerinds
 
 if __name__ == '__main__':
 	solve_stokesTimeDep()
