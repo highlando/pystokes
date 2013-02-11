@@ -20,12 +20,24 @@ def solve_stokesTimeDep(debu=None):
 	# get system matrices as np.arrays
 	Aa, BTa, Ba = get_sysNSmats(V, Q)
 	
-	fv, fp = setget_rhs(V, Q, velbcs)
+	fv, fp = setget_rhs(V, Q) #, velbcs)
+
+	Ac, BTc, Bc, fvc, fp = condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs)
+
+	###
+	# Time stepping
+	###
+	sadSysmatv = sps.hstack([Ac,Btc])
+	sadSysmatp = sps.hstack([Bc,sps.csr_matrix((Bc.shape[0],Bc.shape[0]))])
+	sadSysmat = sps.vstack([sadSysmatv,sadSysmatp])
+
+	for i in range(Nts):
+		#iterateeee
 
 
 
 	if debu is not None:
-		return Aa, BTa, Ba, velbcs, fv, fp, mesh, V, Q
+		return Ac, BTc, Bc, velbcs, fvc, fp, mesh, V, Q
 	else:
 		return
 
@@ -159,7 +171,8 @@ def get_sysNSmats( V, Q): # , velbcs ):
 
 	return Aa, BTa, Ba
 	
-def setget_rhs(V, Q, velbcs, t=None):
+
+def setget_rhs(V, Q, velbcs=None, t=None):
 
 	if t is None:
 		fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
@@ -168,8 +181,6 @@ def setget_rhs(V, Q, velbcs, t=None):
 				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
 				"+ x[0]*(1-x[0])*(1-2*x[1])"))
 	
-	
-
 	#fv = Expression(("sin(x[0])","0"))
 	fp = Constant((0))
 
@@ -182,9 +193,6 @@ def setget_rhs(V, Q, velbcs, t=None):
 	fv = assemble(fv)
 	fp = assemble(fp)
 
-	for bc in velbcs:
-		bc.apply(fv)
-
 	fv = fv.array()
 	fv = fv.reshape(len(fv), 1)
 
@@ -193,8 +201,6 @@ def setget_rhs(V, Q, velbcs, t=None):
 
 	return fv, fp
 
-	#for bc in velbcs:
-	#	bc.apply(A, fv)
 
 def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	"""resolve the Dirichlet BCs and condense the sysmats
@@ -208,8 +214,6 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 		auxu[bcdict.keys(),0] = bcdict.values()
 		bcinds.extend(bcdict.keys())
 
-	print bcinds
-	
 	# accumulating the bcs to the right hand sides
 	fv = fv - Aa*auxu    # '*' is np.dot for csr matrices
 	fp = fp - Ba*auxu
@@ -220,8 +224,14 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	# extract the inner nodes equation coefficients
 	Ac = Aa[innerinds,:][:,innerinds]
 	fvc= fv[innerinds,:]
-	Bc = Ba[:,innerinds]
+	Bc  = Ba[:,innerinds]
 	BTc = BTa[innerinds,:]
+
+	# removal of the indefiniteness in pressure via pi_0 !=! 0
+	# eeeh, better not here :/
+	# Bc  = Ba[1:,innerinds]
+	# BTc = BTa[innerinds,1:]
+	# fp  = fp[1:,0]
 
 	return Ac, BTc, Bc, fvc, fp
 
