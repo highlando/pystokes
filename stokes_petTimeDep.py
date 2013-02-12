@@ -6,7 +6,7 @@ import scipy.sparse as sps
 parameters.linear_algebra_backend = "uBLAS"
 
 def solve_stokesTimeDep(debu=None):
-	"""function to solve
+	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
 		         div u          = fp
@@ -30,7 +30,7 @@ def solve_stokesTimeDep(debu=None):
 
 	Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
 			condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs)
-
+	
 	###
 	# Time stepping
 	###
@@ -48,8 +48,11 @@ def solve_stokesTimeDep(debu=None):
 	iterA  = np.eye(dimredsys) - dt*sadSysmat[:-1,:-1]
 	v, p   = expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
 			vp=vp_old,vc=None,pc=None)
+
+
 	u_file << v
 	p_file << p
+
 	for i in range(Nts):
 		tcur = tcur + dt
 		#iterateeee
@@ -64,7 +67,7 @@ def solve_stokesTimeDep(debu=None):
 	if debu is not None:
 		return Ac, BTc, Bc, velbcs, fvc, fp, mesh, V, Q
 	else:
-		return
+		return v, mesh, V, Q
 
 def expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
 		vp=None,vc=None,pc=None):
@@ -162,15 +165,16 @@ def getmake_mesh_smaminext(N):
 def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
 	def top(x, on_boundary): 
-	  return ( x[1] > 1.0 - DOLFIN_EPS
-			  and x[0] > 1.0 - DOLFIN_EPS 
-			  and x[0] < DOLFIN_EPS)
+		print x[0], x[1]
+		return ( (np.fabs(x[1] - 1.0 ) < DOLFIN_EPS)
+			  and (np.fabs(x[0]) > DOLFIN_EPS))
+			  #and np.fabs(x[0] - 1.0) > DOLFIN_EPS )
 			  
 
 	def leftbotright(x, on_boundary): 
-	  return ( x[0] > 1.0 - DOLFIN_EPS 
-				or x[1] < DOLFIN_EPS 
-				or x[0] < DOLFIN_EPS)
+		return ( np.fabs(x[0] - 1.0) < DOLFIN_EPS 
+				or np.fabs(x[1]) < DOLFIN_EPS 
+				or np.fabs(x[0]) < DOLFIN_EPS)
 
 	# No-slip boundary condition for velocity
 	noslip = Constant((0.0, 0.0))
@@ -262,6 +266,7 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	bcinds = []
 	for bc in velbcs:
 		bcdict = bc.get_boundary_values()
+		print bcdict
 		auxu[bcdict.keys(),0] = bcdict.values()
 		bcinds.extend(bcdict.keys())
 
