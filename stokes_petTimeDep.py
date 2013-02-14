@@ -14,8 +14,8 @@ def solve_stokesTimeDep(debu=None):
 	"""
 
 	# get the mesh 
-	N = 2
-	# mesh = UnitSquare(N, N)
+	N = 16
+	# mesh = UnitSquareMesh(N, N)
 	mesh = getmake_mesh_smaminext(N)
 
 	# Define mixed FEM function spaces
@@ -38,38 +38,46 @@ def solve_stokesTimeDep(debu=None):
 	sadSysmatp = sps.hstack([Bc,sps.csr_matrix((Bc.shape[0],Bc.shape[0]))])
 	sadSysmat = sps.vstack([sadSysmatv,sadSysmatp]).todense()
 
-	Nts, t0, tE = 20, 0, 1.
+	Nts, t0, tE = 140, 0, 10.
 	dt = (t0-tE)/Nts
-	u_file = File("results/velocity.pvd"),
-	p_file = File("results/pressure.pvd"),
+	u_file = File("results/velocity.pvd")
+	p_file = File("results/pressure.pvd")
 	# starting value
 	dimredsys = len(fvc)+len(fp)-1
 	vp_old = np.zeros((dimredsys,1))
 	iterA  = np.eye(dimredsys) - dt*sadSysmat[:-1,:-1]
-	v, p   = expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+	v, p   = expand_vp_dolfunc(invinds,velbcs,V,Q,
 			vp=vp_old,vc=None,pc=None)
 
 
-	u_file << v
-	p_file << p
+	tcur = 0
+	u_file << v, tcur
+	p_file << p, tcur
 
 	for i in range(Nts):
 		tcur = tcur + dt
 		#iterateeee
-		iterrhs = vp_old + dt*np.vstack([fv,fp[:-1]])
+		iterrhs = vp_old + dt*np.vstack([fvc,fp[:-1],])
 		vp_new = np.linalg.solve(iterA,iterrhs)
-		v, p = expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+		v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
 				vp=vp_new,vc=None,pc=None)
 		u_file << v, tcur
 		p_file << p, tcur
+		vp_old = vp_new
+	
+	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
+	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
+	#		vp=vp_stat,vc=None,pc=None)
+	#u_file << v, 1
+	#p_file << p, 1
 
 
 	if debu is not None:
 		return Ac, BTc, Bc, velbcs, fvc, fp, mesh, V, Q
 	else:
-		return v, mesh, V, Q
+		return v, p, mesh, V, Q
 
-def expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
+def expand_vp_dolfunc(invinds,velbcs,V,Q,
 		vp=None,vc=None,pc=None):
 	"""expand v and p to the dolfin function representation"""
 
@@ -77,13 +85,17 @@ def expand_vp_dolfunc(invinds,bcinds,bcvals,V,Q,
 	p = Function(Q)
 
 	if vp is not None:
-		vc = vp[:V.dim()-len(bcinds),:]
-		pc = vp[V.dim()-len(bcinds):,:]
+		vc = vp[:len(invinds),:]
+		pc = vp[len(invinds):,:]
 
 	ve = np.zeros((V.dim(),1))
 
+	# fill in the boundary values
+	for bc in velbcs:
+		bcdict = bc.get_boundary_values()
+		ve[bcdict.keys(),0] = bcdict.values()
+
 	ve[invinds] = vc
-	ve[bcinds] = bcvals
 
 	pe = np.vstack([pc,[0]])
 
@@ -165,10 +177,9 @@ def getmake_mesh_smaminext(N):
 def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
 	def top(x, on_boundary): 
-		print x[0], x[1]
-		return ( (np.fabs(x[1] - 1.0 ) < DOLFIN_EPS)
-			  and (np.fabs(x[0]) > DOLFIN_EPS))
-			  #and np.fabs(x[0] - 1.0) > DOLFIN_EPS )
+		return  np.fabs(x[1] - 1.0 ) < DOLFIN_EPS 
+			  # and (np.fabs(x[0]) > DOLFIN_EPS))
+			  # and np.fabs(x[0] - 1.0) > DOLFIN_EPS )
 			  
 
 	def leftbotright(x, on_boundary): 
@@ -266,7 +277,6 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	bcinds = []
 	for bc in velbcs:
 		bcdict = bc.get_boundary_values()
-		print bcdict
 		auxu[bcdict.keys(),0] = bcdict.values()
 		bcinds.extend(bcdict.keys())
 
