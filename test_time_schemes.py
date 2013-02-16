@@ -1,10 +1,10 @@
 from dolfin import *
-#from scipy.sparse import csr_matrix
 import numpy as np
 import scipy.sparse as sps
+from scipy.linalg import qr
+import smartminex_tayhoomesh 
 
 parameters.linear_algebra_backend = "uBLAS"
-
 
 def solve_stokesTimeDep(debu=None):
 	"""system to solve
@@ -14,62 +14,27 @@ def solve_stokesTimeDep(debu=None):
 
 	"""
 
-	# get the mesh 
-	N = 16
-	# mesh = UnitSquareMesh(N, N)
-	mesh = getmake_mesh_smaminext(N)
+	N = 8
 
-	# Define mixed FEM function spaces
-	V = VectorFunctionSpace(mesh, "CG", 2)
-	Q = FunctionSpace(mesh, "CG", 1)
-	velbcs = setget_velbcs_zerosq(mesh, V)
+	# instantiate object containing mesh, V, Q, velbcs, invinds
+	PrP = ProbParams(N)
 
 	# get system matrices as np.arrays
-	Ma, Aa, BTa, Ba = get_sysNSmats(V, Q)
-	
-	fv, fp = setget_rhs(V, Q)
+	Ma, Aa, BTa, Ba = get_sysNSmats(PrP.V, PrP.Q)
+	fv, fp = setget_rhs(PrP.V, PrP.Q)
 
-	Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
-			condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs)
+	Mc, Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
+			condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
-	sadSysmatv = sps.hstack([Ac,BTc])
-	sadSysmatp = sps.hstack([Bc,sps.csr_matrix((Bc.shape[0],Bc.shape[0]))])
-	sadSysmat = sps.vstack([sadSysmatv,sadSysmatp]).todense()
-	
-	Msysmat = sps.bmat([[Ma[invinds,:][:,invinds],None],[None,sps.csr_matrix((Bc.shape[0],Bc.shape[0]))]]) 
-	Msysmat = sps.coo_matrix.tocsr(Msysmat)
 	###
 	# Time stepping
 	###
-	Nts, t0, tE = 10, 0, 1.
-	dt = (t0-tE)/Nts
-
-	u_file = File("results/velocity.pvd")
-	p_file = File("results/pressure.pvd")
-
 	# starting value
 	dimredsys = len(fvc)+len(fp)-1
-	vp_old = np.zeros((dimredsys,1))
+	vp_init   = np.zeros((dimredsys,1))
 
-	v, p   = expand_vp_dolfunc(invinds,velbcs,V,Q,
-			vp=vp_old,vc=None,pc=None)
-
-	tcur = t0
-	u_file << v, tcur
-	p_file << p, tcur
-
-	iterA  = -dt*sadSysmat[:-1,:-1]
-	iterA += Msysmat[:,:-1][:-1,:].todense()
-	for i in range(Nts):
-		tcur = tcur + dt
-		#iterateeee
-		iterrhs = Msysmat[:,:-1][:-1,:]*vp_old + dt*np.vstack([fvc,fp[:-1,]])
-		vp_new = np.linalg.solve(iterA,iterrhs)
-		v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
-				vp=vp_new,vc=None,pc=None)
-		u_file << v, tcur
-		p_file << p, tcur
-		vp_old = vp_new
+	qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None)
+	#plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None)
 	
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
@@ -77,31 +42,134 @@ def solve_stokesTimeDep(debu=None):
 	#u_file << v, 1
 	#p_file << p, 1
 
+	return 
 
-	if debu is not None:
-		return Ac, BTc, Bc, velbcs, fvc, fp, mesh, V, Q
-	else:
-		return v, p, mesh, V, Q
+def qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
+	""" with BTc[:-1,:] = Q*[R ; 0] 
+	we define ~M = Q*M*Q.T , ~A = Q*A*Q.T , ~V = Q*v
+	and condense the system accordingly """
 
-def expand_vp_dolfunc(invinds,velbcs,V,Q,
-		vp=None,vc=None,pc=None):
+	Nts, t0, tE = 10, 0, 1.
+	dt = (t0-tE)/Nts
+
+	Nv = len(fvc)
+	Np = len(fp)
+
+	upf = UpFiles('QrImpEul')
+
+	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None)
+
+	tcur = t0
+
+	upf.u_file << v, tcur
+	upf.p_file << p, tcur
+
+	# Use SVD, as QR does not give the full Q matrix
+	# QR = BT is like QR^2QT = BT*B
+	Qm, Rm = qr(BTc.todense()[:,:-1],mode='full')
+	#Rm = np.diag(np.sqrt(Sm[:Np-1]))
+
+	Qm_1 = Qm[:Np-1,]   #first Np-1 rows of Q
+	Qm_2 = Qm[Np-1:,]   #last Nv-(Np-1) rows of Q
+
+	TM_11 = np.dot(Qm_1,np.dot(Mc.todense(),Qm_1.T))
+	TA_11 = np.dot(Qm_1,np.dot(Ac.todense(),Qm_1.T))
+
+	TM_21 = np.dot(Qm_2,np.dot(Mc.todense(),Qm_1.T))
+	TA_21 = np.dot(Qm_2,np.dot(Ac.todense(),Qm_1.T))
+
+	TM_12 = np.dot(Qm_1,np.dot(Mc.todense(),Qm_2.T))
+	TA_12 = np.dot(Qm_1,np.dot(Ac.todense(),Qm_2.T))
+
+	TM_22 = np.dot(Qm_2,np.dot(Mc.todense(),Qm_2.T))
+	TA_22 = np.dot(Qm_2,np.dot(Ac.todense(),Qm_2.T))
+
+	Tv1 = np.linalg.solve(Rm[:Np-1,].T, fp[:-1,])
+
+	Tv2_old = np.dot(Qm_2, vp_init[:Nv,])
+
+	Tfv2 = np.dot(Qm_2, fvc) + np.dot(TA_21, Tv1)
+
+	IterA2  = TM_22-dt*TA_22
+
+	for i in range(Nts):
+		tcur = tcur + dt
+
+		Iter2rhs = np.dot(TM_22, Tv2_old) + dt*Tfv2
+		Tv2_new = np.linalg.solve(IterA2, Iter2rhs)
+
+		Tv2_old = Tv2_new
+
+		# Retransformation v = Q.T*Tv
+		vc_new = np.dot(Qm.T, np.vstack([Tv1, Tv2_new]))
+		
+		RhsTv2dot = Tfv2 + np.dot(TA_22, Tv2_new) 
+		Tv2dot = np.linalg.solve(TM_22, RhsTv2dot)
+
+		RhsP = np.dot(Qm_1,fvc) + np.dot(TA_11,Tv1) \
+				+ np.dot(TA_12,Tv2_new) - np.dot(TM_12,Tv2dot)
+
+		pc_new = np.linalg.solve(Rm[:Np-1,],RhsP)
+
+		v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc_new, pc=pc_new)
+		upf.u_file << v, tcur
+		upf.p_file << p, tcur
+		
+	return
+
+def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
+
+	Nts, t0, tE = 10, 0, 1.
+	dt = (t0-tE)/Nts
+
+	Nv = len(fvc)
+	Np = len(fp)
+
+	upf = UpFiles('ImpEul')
+
+	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None)
+
+	tcur = t0
+
+	upf.u_file << v, tcur
+	upf.p_file << p, tcur
+
+	IterAv = sps.hstack([Mc-dt*Ac,dt*BTc])
+	IterAp = sps.hstack([dt*Bc,sps.csr_matrix((Np,Np))])
+	IterA  = sps.vstack([IterAv,IterAp]).todense()[:-1,:-1]
+
+	vp_old = vp_init
+	for i in range(Nts):
+		tcur = tcur + dt
+		#iterateeee
+		Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
+				+ dt*np.vstack([fvc,fp[:-1,]])
+		vp_new = np.linalg.solve(IterA,Iterrhs)
+		v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
+		upf.u_file << v, tcur
+		upf.p_file << p, tcur
+		vp_old = vp_new
+		
+	return
+
+def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None):
 	"""expand v and p to the dolfin function representation"""
 
-	v = Function(V)
-	p = Function(Q)
+	v = Function(PrP.V)
+	p = Function(PrP.Q)
 
 	if vp is not None:
-		vc = vp[:len(invinds),:]
-		pc = vp[len(invinds):,:]
+		vc = vp[:len(PrP.invinds),:]
+		pc = vp[len(PrP.invinds):,:]
 
-	ve = np.zeros((V.dim(),1))
+	ve = np.zeros((PrP.V.dim(),1))
 
 	# fill in the boundary values
-	for bc in velbcs:
+	for bc in PrP.velbcs:
 		bcdict = bc.get_boundary_values()
 		ve[bcdict.keys(),0] = bcdict.values()
 
-	ve[invinds] = vc
+	ve[PrP.invinds] = vc
 
 	pe = np.vstack([pc,[0]])
 
@@ -109,76 +177,6 @@ def expand_vp_dolfunc(invinds,velbcs,V,Q,
 	p.vector().set_local(pe)
 
 	return v, p
-
-def get_ij_subgrid(k,N):
-	"""to get i,j numbering of the cluster centers of smaminext"""
-
-	n = N-1
-	if k > n**2-1 or k < 0:
-		raise Exception('%s: No such node on the subgrid!' % k)
-		
-	j = np.mod(k,n)
-	i = (k-j)/n
-	return j, i
-
-def getmake_mesh_smaminext(N):
-	"""write the mesh for the smart minext tayHood square
-
-	order is I. main grid, II. subgrid = grid of the cluster centers
-	and in I and II lexikographical order
-	first y-dir, then x-dir """
-
-	try:
-		f = open('smegrid%s.xml' % N)
-	except IOError:
-		print 'Need generate the mesh...'
-
-		# main grid
-		h = 1./(N-1)
-		y, x = np.ogrid[0:N,0:N]
-		y = h*y+0*x
-		x = h*x+0*y
-		mgrid = np.hstack((y.reshape(N**2,1), x.reshape(N**2,1)))
-
-		# sub grid
-		y, x = np.ogrid[0:N-1,0:N-1]
-		y = h*y+0*x
-		x = h*x+0*y
-		sgrid = np.hstack((y.reshape((N-1)**2,1), x.reshape((N-1)**2,1)))
-
-		grid = np.vstack((mgrid,sgrid+0.5*h))
-
-		f = open('smegrid%s.xml' % N, 'w')
-		f.write('<?xml version="1.0"?> \n <dolfin xmlns:dolfin="http://www.fenicsproject.org"> \n <mesh celltype="triangle" dim="2"> \n')
-
-		f.write('<vertices size="%s">\n' % (N**2+(N-1)**2) )
-		for k in range(N**2+(N-1)**2):
-			f.write('<vertex index="%s" x="%s" y="%s" />\n' % (k, grid[k,0], grid[k,1]))
-		
-		f.write('</vertices>\n')
-		f.write('<cells size="%s">\n' % (4*(N-1)**2))
-		for j in range(N-1):
-			for i in range(N-1):
-				# number of current cluster center
-				k = j*(N-1) + i 
-				# vertices of the main grid in the cluster
-				v0, v1, v2, v3 = j*N+i, (j+1)*N+i, (j+1)*N+i+1, j*N+i+1 
-
-				f.write('<triangle index="%s" v0="%s" v1="%s" v2="%s" />\n' % (4*k,   v0, N**2+k, v1))
-				f.write('<triangle index="%s" v0="%s" v1="%s" v2="%s" />\n' % (4*k+1, v1, N**2+k, v2))
-				f.write('<triangle index="%s" v0="%s" v1="%s" v2="%s" />\n' % (4*k+2, v2, N**2+k, v3)) 
-				f.write('<triangle index="%s" v0="%s" v1="%s" v2="%s" />\n' % (4*k+3, v3, N**2+k, v0)) 
-
-		f.write('</cells>\n')
-		
-		f.write('</mesh> \n </dolfin> \n')
-		f.close()
-
-		print 'done'
-
-	mesh = Mesh('smegrid%s.xml' % N)
-
-	return mesh
 
 def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
@@ -281,7 +279,7 @@ def setget_rhs(V, Q, velbcs=None, t=None):
 	return fv, fp
 
 
-def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
+def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	"""resolve the Dirichlet BCs and condense the sysmats
 
 	to the inner nodes"""
@@ -301,6 +299,7 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	innerinds = np.setdiff1d(range(len(fv)),bcinds)
 
 	# extract the inner nodes equation coefficients
+	Mc = Ma[innerinds,:][:,innerinds]
 	Ac = Aa[innerinds,:][:,innerinds]
 	fvc= fv[innerinds,:]
 	Bc  = Ba[:,innerinds]
@@ -314,13 +313,39 @@ def condense_sysmatsbybcs(Aa,BTa,Ba,fv,fp,velbcs):
 	# BTc = BTa[innerinds,1:]
 	# fp  = fp[1:,0]
 
-	return Ac, BTc, Bc, fvc, fp, bcinds, bcvals, innerinds
+	return Mc, Ac, BTc, Bc, fvc, fp, bcinds, bcvals, innerinds
+
+class TimestepParams(object):
+	def __init__(self):
+		self.t0 = 0
+		self.tE = 1
+		self.Nts = 10
+
+
+class ProbParams(object):
+	def __init__(self,N=None):
+		if N is not None:
+			self.mesh = smartminex_tayhoomesh.getmake_mesh(N)
+		else:
+			self.mesh = smartminex_tayhoomesh.getmake_mesh(16)
+
+		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
+		self.Q = FunctionSpace(self.mesh, "CG", 1)
+		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
+
+		bcinds = []
+		for bc in self.velbcs:
+			bcdict = bc.get_boundary_values()
+			bcinds.extend(bcdict.keys())
+
+		# indices of the inner velocity nodes
+		self.invinds = np.setdiff1d(range(self.V.dim()),bcinds)
 
 class UpFiles(object):
 	def __init__(self, name=None):
 		if name is not None:
-			self.u_file = File("results/%r_velocity.pvd" % name)
-			self.p_file = File("results/%r_pressure.pvd" % name)
+			self.u_file = File("results/%s_velocity.pvd" % name)
+			self.p_file = File("results/%s_pressure.pvd" % name)
 		else:
 			self.u_file = File("results/velocity.pvd")
 			self.p_file = File("results/pressure.pvd")
