@@ -78,6 +78,18 @@ def setget_rhs(V, Q, velbcs=None, t=None):
 
 	return fv, fp
 
+def get_convvec(v_cur, V):
+	"""return the convection vector e.g. for explicit schemes
+	"""
+
+	v = TestFunction(V)
+	ConvForm = inner(grad(u0)*u0, v)*dx
+
+	ConvForm = assemble(ConvForm)
+	ConvVec = ConvForm.array()
+	ConvVec = ConvVec.reshape(len(ConvVec), 1)
+
+	return ConvVec
 
 def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	"""resolve the Dirichlet BCs and condense the sysmats

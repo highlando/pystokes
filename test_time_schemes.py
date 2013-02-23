@@ -4,6 +4,7 @@ import scipy.sparse as sps
 
 import dolfin_to_nparrays as dtn
 import time_int_schemes as tis
+reload(tis)
 		
 import smartminex_tayhoomesh 
 
@@ -26,7 +27,9 @@ def solve_stokesTimeDep():
 	methdict = {0:'ImpEulFull', 1:'ImpEulQr'}
 
 	N = 8
-	method = 1
+	method = 0
+
+	print 'You have chosen %s for time integration' % methdict[method]
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
 	PrP = ProbParams(N)
