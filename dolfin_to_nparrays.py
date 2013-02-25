@@ -78,7 +78,7 @@ def setget_rhs(V, Q, velbcs=None, t=None):
 
 	return fv, fp
 
-def get_convvec(v_cur, V):
+def get_convvec(u0, V):
 	"""return the convection vector e.g. for explicit schemes
 	"""
 

@@ -3,6 +3,7 @@ import numpy as np
 import scipy.sparse as sps
 
 import dolfin_to_nparrays as dtn
+reload(dtn)
 import time_int_schemes as tis
 reload(tis)
 		
@@ -24,10 +25,13 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	methdict = {0:'ImpEulFull', 1:'ImpEulQr'}
-
 	N = 8
-	method = 0
+	method = 2
+
+
+	methdict = {0:'ImpEulFull', 
+			1:'ImpEulQr', 
+			2:'HalfExpEulInd2'}
 
 	print 'You have chosen %s for time integration' % methdict[method]
 
@@ -35,7 +39,7 @@ def solve_stokesTimeDep():
 	PrP = ProbParams(N)
 
 	# instantiate the Time Int Parameters
-	TsP = TimestepParams(methdict[0])
+	TsP = TimestepParams(methdict[method])
 
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
@@ -56,6 +60,8 @@ def solve_stokesTimeDep():
 				PrP,TsP=TsP)
 	elif method == 1:
 		tis.qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=TsP)
+	elif method == 2:
+		tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=TsP)
 	
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,

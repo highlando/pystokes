@@ -10,7 +10,7 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fp
 ###
 
-def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
+def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
 
@@ -31,17 +31,17 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
 		for i in range(Nts/10):
 			tcur = tcur + dt
 
-			ConV = dtn.get_convvec(vp_old, PrP.V)
+			ConV = 0*dtn.get_convvec(v, PrP.V)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
 					+ dt*np.vstack([fvc-Ac*vp_old[:Nv]-ConV[PrP.invinds,],
 						fp[:-1,]])
 			vp_new = np.linalg.solve(IterA,Iterrhs)
 			vp_old = vp_new
+			v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
 
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
-		v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
 
 		TsP.UpFiles.u_file << v, tcur
 		TsP.UpFiles.p_file << p, tcur
@@ -123,8 +123,6 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
-
-	print np.linalg.eig((Mc+dt*Ac).todense())
 
 	IterAv = sps.hstack([Mc+dt*Ac,-dt*BTc])
 	IterAp = sps.hstack([-dt*Bc,sps.csr_matrix((Np,Np))])
