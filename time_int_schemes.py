@@ -26,15 +26,17 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 	IterAp = sps.hstack([Bc,sps.csr_matrix((Np,Np))])
 	IterA  = sps.vstack([IterAv,IterAp]).todense()[:-1,:-1]
 
+	print np.linalg.cond(IterA)
+
 	vp_old = vp_init
 	for etap in range(1,11):
 		for i in range(Nts/10):
 			tcur = tcur + dt
 
-			ConV = 0*dtn.get_convvec(v, PrP.V)
+			ConV = dtn.get_convvec(v, PrP.V)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ dt*np.vstack([fvc-Ac*vp_old[:Nv]-ConV[PrP.invinds,],
+					+ dt*np.vstack([fvc-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						fp[:-1,]])
 			vp_new = np.linalg.solve(IterA,Iterrhs)
 			vp_old = vp_new
@@ -146,6 +148,15 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 		TsP.UpFiles.p_file << p, tcur
 		
 	return
+
+def comp_cont_error(vc,Bc,g,Mp):
+	"""Compute the residual in the continuity equation
+	"""
+
+	ContEr = np.sqrt(2)
+	return ContEr
+
+
 
 def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None):
 	"""expand v and p to the dolfin function representation"""

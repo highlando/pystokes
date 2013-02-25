@@ -12,8 +12,8 @@ import smartminex_tayhoomesh
 class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
-		self.tE = 0.5
-		self.Nts = 100
+		self.tE = 0.1
+		self.Nts = 10
 		self.method = method
 		self.UpFiles = UpFiles(method)
 
@@ -25,7 +25,7 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 8
+	N = 16
 	method = 2
 
 
