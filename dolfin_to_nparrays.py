@@ -49,17 +49,7 @@ def get_sysNSmats( V, Q): # , velbcs ):
 	return Ma, Aa, BTa, Ba
 	
 
-def setget_rhs(V, Q, velbcs=None, t=None):
-
-	if t is None:
-		fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
-				"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
-				"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
-				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
-				"+ x[0]*(1-x[0])*(1-2*x[1])"))
-	
-	#fv = Expression(("sin(x[0])","0"))
-	fp = Constant((0))
+def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):
 
 	v = TestFunction(V)
 	q = TestFunction(Q)

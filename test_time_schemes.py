@@ -43,7 +43,7 @@ def solve_stokesTimeDep():
 
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
-	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q)
+	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
 
 	Mc, Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
@@ -107,6 +107,12 @@ class ProbParams(object):
 		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
 		self.Q = FunctionSpace(self.mesh, "CG", 1)
 		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
+		self.fp = Constant((0))
+		self.fv = Expression(("4*(x[0]*x[0]*x[0]*(6-12*x[1])+pow(x[0],4)*(6*x[1]-3)+x[1]*(1-3*x[1]+2*x[1]*x[1])"\
+				"-6*x[0]*x[1]*(1-3*x[1]+2*x[1]*x[1])+3*x[0]*x[0]*(-1+4*x[1]-6*x[1]*x[1]+4*pow(x[1],3)))"\
+				"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
+				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
+				"+ x[0]*(1-x[0])*(1-2*x[1])"))
 
 		bcinds = []
 		for bc in self.velbcs:

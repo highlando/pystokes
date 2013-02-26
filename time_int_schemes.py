@@ -148,11 +148,14 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 		
 	return
 
-def comp_cont_error(vc,Bc,g,Mp):
-	"""Compute the residual in the continuity equation
+def comp_cont_error(v,gc,PrP):
+	"""Compute the L2 norm of the residual of the continuity equation
+		Bv = g
 	"""
 
-	ContEr = np.sqrt(2)
+	
+
+
 	return ContEr
 
 
