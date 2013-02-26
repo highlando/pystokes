@@ -1,6 +1,7 @@
 from dolfin import *
 import numpy as np
 import scipy.sparse as sps
+import scipy.sparse.linalg as spsla
 from scipy.linalg import qr
 
 import dolfin_to_nparrays as dtn
@@ -22,11 +23,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	IterAv = sps.hstack([Mc,-dt*BTc])
-	IterAp = sps.hstack([Bc,sps.csr_matrix((Np,Np))])
-	IterA  = sps.vstack([IterAv,IterAp]).todense()[:-1,:-1]
-
-	print np.linalg.cond(IterA)
+	IterAv = sps.hstack([Mc+dt*Ac,-dt*BTc[:,:-1]])
+	IterAp = sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	IterA  = sps.vstack([IterAv,IterAp])
 
 	vp_old = vp_init
 	for etap in range(1,11):
@@ -36,9 +35,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 			ConV = dtn.get_convvec(v, PrP.V)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ dt*np.vstack([fvc-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
+					+ dt*np.vstack([fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						fp[:-1,]])
-			vp_new = np.linalg.solve(IterA,Iterrhs)
+			vp_new = spsla.spsolve(IterA,Iterrhs).reshape(len(vp_old),1)
 			vp_old = vp_new
 			v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
 
@@ -165,8 +164,12 @@ def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None):
 	p = Function(PrP.Q)
 
 	if vp is not None:
-		vc = vp[:len(PrP.invinds),:]
-		pc = vp[len(PrP.invinds):,:]
+		if vp.ndim == 1:
+			vc = vp[:len(PrP.invinds)].reshape(len(PrP.invinds),1)
+			pc = vp[len(PrP.invinds):].reshape(PrP.Q.dim()-1,1)
+		else:
+			vc = vp[:len(PrP.invinds),:]
+			pc = vp[len(PrP.invinds):,:]
 
 	ve = np.zeros((PrP.V.dim(),1))
 

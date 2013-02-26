@@ -25,7 +25,7 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 16
+	N = 32 
 	method = 2
 
 
