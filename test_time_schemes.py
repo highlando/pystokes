@@ -54,7 +54,7 @@ def solve_stokesTimeDep():
 	# starting value
 	dimredsys = len(fvc)+len(fp)-1
 	vp_init   = np.zeros((dimredsys,1))
-
+	
 	if method == 0:
 		tis.plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init, 
 				PrP,TsP=TsP)

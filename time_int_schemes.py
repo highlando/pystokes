@@ -24,7 +24,8 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 	TsP.UpFiles.p_file << p, tcur
 
 	IterAv = sps.hstack([Mc+dt*Ac,-dt*BTc[:,:-1]])
-	IterAp = sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	#make it symmetric for using minres
+	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 
 	vp_old = vp_init
@@ -36,12 +37,12 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
 					+ np.vstack([dt*(fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
-						fp[:-1,]])
-			vp_new = spsla.spsolve(IterA,Iterrhs).reshape(len(vp_old),1)
+						-dt*fp[:-1,]])
+			vp_new = spsla.minres(IterA,Iterrhs,vp_old,tol=1e-6)#.reshape(len(vp_old),1)
 			vp_old = vp_new
 			v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
 			
-			ContEr = comp_cont_error(v,PrP.fp,PrP.Q)
+			ContEr = comp_cont_error(v,fp,PrP.Q)
 
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
@@ -154,14 +155,22 @@ def comp_cont_error(v,fp,Q):
 	"""Compute the L2 norm of the residual of the continuity equation
 		Bv = g
 	"""
-	q = TestFunction(Q)
+
+	q = TrialFunction(Q)
 	divv = assemble(q*div(v)*dx)
 
-	ContEr = errornorm(fp,divv.array())
+	conRhs = Function(Q)
+	conRhs.vector().set_local(fp)
+
+	#raise Warning('debugggg')
+
+	ContEr = norm(conRhs.vector()-divv)
 
 	print ContEr
+	print norm(v)
 
 	return ContEr
+
 
 def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None):
 	"""expand v and p to the dolfin function representation"""
