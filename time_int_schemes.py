@@ -35,11 +35,13 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 			ConV = dtn.get_convvec(v, PrP.V)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ dt*np.vstack([fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
+					+ np.vstack([dt*(fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
 						fp[:-1,]])
 			vp_new = spsla.spsolve(IterA,Iterrhs).reshape(len(vp_old),1)
 			vp_old = vp_new
 			v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
+			
+			ContEr = comp_cont_error(v,PrP.fp,PrP.Q)
 
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
@@ -148,17 +150,18 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 		
 	return
 
-def comp_cont_error(v,gc,PrP):
+def comp_cont_error(v,fp,Q):
 	"""Compute the L2 norm of the residual of the continuity equation
 		Bv = g
 	"""
+	q = TestFunction(Q)
+	divv = assemble(q*div(v)*dx)
 
-	
+	ContEr = errornorm(fp,divv.array())
 
+	print ContEr
 
 	return ContEr
-
-
 
 def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None):
 	"""expand v and p to the dolfin function representation"""
