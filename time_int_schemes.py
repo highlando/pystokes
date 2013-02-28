@@ -38,11 +38,13 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
 					+ np.vstack([dt*(fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
 						-dt*fp[:-1,]])
-			vp_new = spsla.minres(IterA,Iterrhs,vp_old,tol=1e-6)#.reshape(len(vp_old),1)
-			vp_old = vp_new
-			v, p = expand_vp_dolfunc(PrP, vp=vp_new, vc=None, pc=None)
+
+			vp_new = spsla.minres(IterA,Iterrhs,vp_old,tol=TsP.linatol)#.reshape(len(vp_old),1)
+			vp_old = np.atleast_2d(vp_new[0]).T
 			
-			ContEr = comp_cont_error(v,fp,PrP.Q)
+			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
+			
+			TsP.Residuals.ContiRes.append(comp_cont_error(v,fp,PrP.Q))
 
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
@@ -165,9 +167,6 @@ def comp_cont_error(v,fp,Q):
 	#raise Warning('debugggg')
 
 	ContEr = norm(conRhs.vector()-divv)
-
-	print ContEr
-	print norm(v)
 
 	return ContEr
 

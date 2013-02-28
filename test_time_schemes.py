@@ -1,6 +1,7 @@
 from dolfin import *
 import numpy as np
 import scipy.sparse as sps
+import matplotlib.pyplot as plt
 
 import dolfin_to_nparrays as dtn
 reload(dtn)
@@ -13,9 +14,11 @@ class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
 		self.tE = 0.1
-		self.Nts = 10
+		self.Nts = 1000
 		self.method = method
 		self.UpFiles = UpFiles(method)
+		self.Residuals = NseResiduals()
+		self.linatol = 1e-6
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -63,10 +66,14 @@ def solve_stokesTimeDep():
 	elif method == 2:
 		tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=TsP)
 	
+	plt.figure(1)
+	plt.plot(TsP.Residuals.ContiRes)
+	plt.title('Lina residual in the continuity eqn')
+	plt.show(block=False)
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
 	#		vp=vp_stat,vc=None,pc=None)
-	#u_file << v, 1
+	u_file << v, 1
 	#p_file << p, 1
 
 	return 
@@ -121,6 +128,10 @@ class ProbParams(object):
 
 		# indices of the inner velocity nodes
 		self.invinds = np.setdiff1d(range(self.V.dim()),bcinds)
+
+class NseResiduals(object):
+	def __init__(self):
+		self.ContiRes = []
 
 class UpFiles(object):
 	def __init__(self, name=None):
