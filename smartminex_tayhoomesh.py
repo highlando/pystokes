@@ -1,5 +1,5 @@
 import numpy as np
-from dolfin import *
+from dolfin import Mesh
 
 def getmake_mesh(N):
 	"""write the mesh for the smart minext tayHood square
