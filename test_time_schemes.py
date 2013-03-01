@@ -13,12 +13,12 @@ import smartminex_tayhoomesh
 class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
-		self.tE = 0.1
-		self.Nts = 1000
+		self.tE = 0.01
+		self.Nts = 10000
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-6
+		self.linatol = 1e-5
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -73,7 +73,7 @@ def solve_stokesTimeDep():
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
 	#		vp=vp_stat,vc=None,pc=None)
-	u_file << v, 1
+	# u_file << v, 1
 	#p_file << p, 1
 
 	return 
