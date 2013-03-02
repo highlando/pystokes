@@ -9,12 +9,12 @@ import time_int_schemes as tis
 reload(tis)
 		
 import smartminex_tayhoomesh 
-
+reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
 		self.tE = 0.01
-		self.Nts = 10000
+		self.Nts = 10
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
@@ -43,6 +43,9 @@ def solve_stokesTimeDep():
 
 	# instantiate the Time Int Parameters
 	TsP = TimestepParams(methdict[method])
+
+	# get the indices of the bubbles of B2
+	B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
 
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
