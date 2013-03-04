@@ -67,6 +67,24 @@ def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):
 	fp = fp.reshape(len(fp), 1)
 
 	return fv, fp
+def get_curfv(V, fv, invinds, tcur):
+	"""get the fv at innernotes at t=tcur
+
+	"""
+
+	v = TestFunction(V)
+
+	fv.t = tcur
+
+	fv = inner(fv,v)*dx 
+
+	fv = assemble(fv)
+
+	fv = fv.array()
+	fv = fv.reshape(len(fv), 1)
+
+	return fv[invinds,:]
+
 
 def get_convvec(u0, V):
 	"""return the convection vector e.g. for explicit schemes

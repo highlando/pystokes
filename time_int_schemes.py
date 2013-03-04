@@ -8,10 +8,10 @@ import dolfin_to_nparrays as dtn
 
 ###
 # solve M\dot v + Av -B'p = fv
-#                 Bv      = fp
+#                 Bv      = fpbc
 ###
 
-def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
+def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
 
@@ -31,20 +31,29 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 	vp_old = vp_init
 	for etap in range(1,11):
 		for i in range(Nts/10):
-			tcur = tcur + dt
 
-			ConV = dtn.get_convvec(v, PrP.V)
+			ConV  = dtn.get_convvec(v, PrP.V)
+			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ np.vstack([dt*(fvc-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
-						-dt*fp[:-1,]])
+					+ np.vstack([dt*(fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
+						-dt*fpbc[:-1,]])
 
 			vp_new = spsla.minres(IterA,Iterrhs,vp_old,tol=TsP.linatol)
 			vp_old = np.atleast_2d(vp_new[0]).T
 			
 			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
 			
-			TsP.Residuals.ContiRes.append(comp_cont_error(v,fp,PrP.Q))
+			tcur += dt
+
+		# the errors  
+		vCur, pCur = PrP.v, PrP.p 
+		vCur.t = tcur
+		pCur.t = tcur - dt
+
+		TsP.Residuals.ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
+		TsP.Residuals.VelEr.append(errornorm(vCur,v))
+		TsP.Residuals.PEr.append(errornorm(pCur,p))
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
 
@@ -53,7 +62,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 		
 	return
 
-def qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
+def qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=None):
 	""" with BTc[:-1,:] = Q*[R ; 0] 
 	we define ~M = Q*M*Q.T , ~A = Q*A*Q.T , ~V = Q*v
 	and condense the system accordingly """
@@ -83,11 +92,11 @@ def qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
 	TM_22 = np.dot(Qm_2,np.dot(Mc.todense(),Qm_2.T))
 	TA_22 = np.dot(Qm_2,np.dot(Ac.todense(),Qm_2.T))
 
-	Tv1 = np.linalg.solve(Rm[:Np-1,].T, fp[:-1,])
+	Tv1 = np.linalg.solve(Rm[:Np-1,].T, fpbc[:-1,])
 
 	Tv2_old = np.dot(Qm_2, vp_init[:Nv,])
 
-	Tfv2 = np.dot(Qm_2, fvc) + np.dot(TA_21, Tv1)
+	Tfv2 = np.dot(Qm_2, fvbc) + np.dot(TA_21, Tv1)
 
 	IterA2  = TM_22+dt*TA_22
 
@@ -106,7 +115,7 @@ def qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
 			RhsTv2dot = Tfv2 - np.dot(TA_22, Tv2_new) 
 			Tv2dot = np.linalg.solve(TM_22, RhsTv2dot)
 
-			RhsP = np.dot(Qm_1,fvc) - np.dot(TA_11,Tv1) \
+			RhsP = np.dot(Qm_1,fvbc) - np.dot(TA_11,Tv1) \
 					- np.dot(TA_12,Tv2_new) - np.dot(TM_12,Tv2dot)
 
 			pc_new = - np.linalg.solve(Rm[:Np-1,],RhsP)
@@ -118,7 +127,7 @@ def qr_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP=None):
 		
 	return
 
-def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
+def plain_impeuler(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 
@@ -139,7 +148,7 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 			tcur = tcur + dt
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ dt*np.vstack([fvc,fp[:-1,]])
+					+ dt*np.vstack([fvbc,fpbc[:-1,]])
 			vp_new = np.linalg.solve(IterA,Iterrhs)
 			vp_old = vp_new
 
@@ -152,7 +161,7 @@ def plain_impeuler(Mc,Ac,BTc,Bc,fvc,fp,vp_init,PrP,TsP):
 		
 	return
 
-def comp_cont_error(v,fp,Q):
+def comp_cont_error(v,fpbc,Q):
 	"""Compute the L2 norm of the residual of the continuity equation
 		Bv = g
 	"""
@@ -161,7 +170,7 @@ def comp_cont_error(v,fp,Q):
 	divv = assemble(q*div(v)*dx)
 
 	conRhs = Function(Q)
-	conRhs.vector().set_local(fp)
+	conRhs.vector().set_local(fpbc)
 
 	#raise Warning('debugggg')
 
