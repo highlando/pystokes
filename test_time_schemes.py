@@ -51,7 +51,7 @@ def solve_stokesTimeDep():
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
 	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
 
-	Mc, Ac, BTc, Bc, fvc, fp, bcinds, bcvals, invinds = \
+	Mc, Ac, BTc, Bc, fvbc, fp, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
 	###
@@ -123,6 +123,9 @@ class ProbParams(object):
 				"+x[1]*(1-x[1])*(1-2*x[0])","-4*(- 3*(-1+x[1])*(-1+x[1])*x[1]*x[1]-3*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])"\
 				"+2*x[0]*x[0]*x[0]*(1-6*x[1]+6*x[1]*x[1])+x[0]*(1-6*x[1]+12*x[1]*x[1]-12*x[1]*x[1]*x[1]+6*x[1]*x[1]*x[1]*x[1]))"\
 				"+ x[0]*(1-x[0])*(1-2*x[1])"))
+
+		self.u = Expression(("sin(t)*x*x*(1-x)*(1-x)*2*y*(1-y)*(2*y-1), sin(t)*y*y*(1-y)*(1-y)*2*x*(1-x)*(1-2*x)"))
+		self.p =  Expression(("sin(t)*x*(1-x)*y*(1-y)"))
 
 		bcinds = []
 		for bc in self.velbcs:

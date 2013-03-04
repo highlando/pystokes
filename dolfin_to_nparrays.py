@@ -93,9 +93,9 @@ def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 		auxu[bcdict.keys(),0] = bcdict.values()
 		bcinds.extend(bcdict.keys())
 
-	# accumulating the bcs to the right hand sides
-	fv = fv - Aa*auxu    # '*' is np.dot for csr matrices
-	fp = fp - Ba*auxu
+	# putting the bcs into the right hand sides
+	fvbc = - Aa*auxu    # '*' is np.dot for csr matrices
+	fpbc = - Ba*auxu
 	
 	# indices of the innernodes
 	innerinds = np.setdiff1d(range(len(fv)),bcinds)
@@ -103,7 +103,7 @@ def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	# extract the inner nodes equation coefficients
 	Mc = Ma[innerinds,:][:,innerinds]
 	Ac = Aa[innerinds,:][:,innerinds]
-	fvc= fv[innerinds,:]
+	fvbc= fv[innerinds,:]
 	Bc  = Ba[:,innerinds]
 	BTc = BTa[innerinds,:]
 
@@ -115,4 +115,4 @@ def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	# BTc = BTa[innerinds,1:]
 	# fp  = fp[1:,0]
 
-	return Mc, Ac, BTc, Bc, fvc, fp, bcinds, bcvals, innerinds
+	return Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, innerinds
