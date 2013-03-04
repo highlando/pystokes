@@ -24,7 +24,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.UpFiles.p_file << p, tcur
 
 	IterAv = sps.hstack([Mc+dt*Ac,-dt*BTc[:,:-1]])
-	#make it symmetric for using minres
+	#-dt*Bc = conti mult. by -dt, to make it symmetric for using minres
 	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 

@@ -67,6 +67,7 @@ def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):
 	fp = fp.reshape(len(fp), 1)
 
 	return fv, fp
+
 def get_curfv(V, fv, invinds, tcur):
 	"""get the fv at innernotes at t=tcur
 

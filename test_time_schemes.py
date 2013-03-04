@@ -14,11 +14,11 @@ class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
 		self.tE = 1.0
-		self.Nts = 512 
+		self.Nts = 64 
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-8
+		self.linatol = 1e-10
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -28,7 +28,7 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 20 
+	N = 30 
 	method = 2
 
 	methdict = {0:'ImpEulFull', 
