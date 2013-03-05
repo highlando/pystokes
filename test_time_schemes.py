@@ -14,11 +14,12 @@ class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
 		self.tE = 1.0
-		self.Nts = 64 
+		self.Nts = 64
+		self.Ntslist = [512, 1024]
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-10
+		self.linatol = 1e-12
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -28,12 +29,13 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 30 
-	method = 2
+	N = 10 
+	method = 3
 
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
-			2:'HalfExpEulInd2'}
+			2:'HalfExpEulInd2',
+			3:'HalfExpEulSmaMin'}
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
 	PrP = ProbParams(N)
@@ -45,14 +47,11 @@ def solve_stokesTimeDep():
 	print 'You have chosen %s for time integration' % methdict[method]
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
-	# get the indices of the bubbles of B2
-	B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
-
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
 	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
 
-	Mc, Ac, BTc, Bc, fvbc, fp, bcinds, bcvals, invinds = \
+	Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
 	###
@@ -62,27 +61,32 @@ def solve_stokesTimeDep():
 	dimredsys = len(fvbc)+len(fp)-1
 	vp_init   = np.zeros((dimredsys,1))
 	
-	if method == 0:
-		tis.plain_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init, 
-				PrP,TsP=TsP)
-	elif method == 1:
-		tis.qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
-	elif method == 2:
-		tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
-	
-	#plt.close('all')
-	fig1 = plt.figure(1)
-	plt.plot(TsP.Residuals.ContiRes)
-	plt.title('Lina residual in the continuity eqn')
-	fig1.canvas.draw()
-	fig2 = plt.figure(2)
-	plt.plot(TsP.Residuals.VelEr)
-	plt.title('Error in the velocity')
-	fig2.canvas.draw()
-	fig3 = plt.figure(3)
-	plt.plot(TsP.Residuals.PEr)
-	plt.title('Error in the pressure')
-	fig3.canvas.draw()
+	for i, CurNTs in enumerate(TsP.Ntslist):
+		TsP.Nts = CurNTs
+
+		if method == 0:
+			tis.plain_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init, 
+					PrP,TsP=TsP)
+		elif method == 1:
+			tis.qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
+		elif method == 2:
+			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
+		elif method == 3:
+			# get the indices of the bubbles of B2
+			# the 1st pressure dof is the one that is removed
+			B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
+			tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP=TsP)
+		
+		fig1 = plt.figure(1)
+		plt.plot(TsP.Residuals.ContiRes[i])
+		plt.title('Lina residual in the continuity eqn')
+		fig2 = plt.figure(2)
+		plt.plot(TsP.Residuals.VelEr[i])
+		plt.title('Error in the velocity')
+		fig3 = plt.figure(3)
+		plt.plot(TsP.Residuals.PEr[i])
+		plt.title('Error in the pressure')
+
 	plt.show(block=False)
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,

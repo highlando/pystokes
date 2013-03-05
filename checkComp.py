@@ -1,47 +1,40 @@
-from dolfin import *
-from scipy.sparse import csr_matrix
+import scipy.sparse 
 import numpy as np
 
-parameters.linear_algebra_backend = "uBLAS"
+# test matrix
+mat = np.zeros((5,5))
+mat[[1, 2, 3, 3], [0, 2, 2, 4]] = 1
+mat = scipy.sparse.lil_matrix(mat)
 
-mixed = True
+# which columns to collect at the end of the matrix
+sub = np.array([0,2])
 
-mesh = UnitSquare(2, 2)
-plot(mesh)
+def col_columns_atend(SparMat,ColInd):
+	"""get a sparse matrix and a vector containing indices
 
-
-if mixed is True:
-	# Define mixed FEM function spaces
-	V = VectorFunctionSpace(mesh, "CG", 2)
-	Q = FunctionSpace(mesh, "CG", 1)
-	W = V * Q
-
-	(u, p) = TrialFunctions(W)
-	(v, q) = TestFunctions(W)
-
-else:
-	# Define FEM function spaces
-	V = VectorFunctionSpace(mesh, "CG", 2)
-
-	u = TrialFunction(V)
-	v = TestFunction(V)
-
-# define Form
-aa = inner(grad(u), grad(v))*dx 
-
-# Assemble system
-A = assemble(aa)
-
-# righthandside
-fvhomo = Constant((1,2))
-Lvh = inner(fvhomo,v)*dx 
-b = assemble(Lvh)
-
-## Convert DOLFIN representation to numpy arrays
-rows, cols, values = A.data()
-Aa = csr_matrix((values, cols, rows))
-ba = b.array()
-ba = ba.reshape(len(ba), 1)
-
-print ba.shape
+	of columns that are appended at the right end 
+	of the matrix. The remaining columns are shifted to left.
+	"""
 	
+	mat_csr = scipy.sparse.csr_matrix(SparMat)
+	MatWid = mat_csr.shape[1]
+
+	# ColInd should not be altered
+	ColIndC = np.copy(ColInd)
+
+	for i in range(len(ColInd)):
+		subind = ColInd[i]
+		idx   = np.where(mat_csr.indices == subind)
+		# shift all columns of higher index by one to the left
+		idxp  = np.where(mat_csr.indices >= subind)
+		mat_csr.indices[idxp] -= 1
+		# and adjust the ColInds for the replacement
+		idsp = np.where(ColInd >= subind)
+		sub[idsp] -= 1
+
+		# append THE column at the end
+		mat_csr.indices[idx] = MatWid - 1
+		
+		return mat_csr
+
+print mat_csr.todense()
