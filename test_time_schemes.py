@@ -13,13 +13,13 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
-		self.tE = 1.0
+		self.tE = 02.0e-1
 		self.Nts = 64
-		self.Ntslist = [512, 1024]
+		self.Ntslist = [128, 256, 512, 1024]
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-12
+		self.linatol = 1e-7
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -29,8 +29,8 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 10 
-	method = 3
+	N = 20 
+	method = 2
 
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
@@ -75,7 +75,12 @@ def solve_stokesTimeDep():
 			# get the indices of the bubbles of B2
 			# the 1st pressure dof is the one that is removed
 			B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
-			tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP=TsP)
+			# we need the B2Bub indices in the reduced setting vc
+			# this gives a masked array of boolean type
+			B2BubBool = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+			#B2BubInds = np.arange(len(B2BubIndsBool
+
+			tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
 		
 		fig1 = plt.figure(1)
 		plt.plot(TsP.Residuals.ContiRes[i])
@@ -95,6 +100,19 @@ def solve_stokesTimeDep():
 	#p_file << p, 1
 
 	return 
+
+def plot_exactsolution(PrP,TsP):
+
+	u_file = File("results/exa_velocity.pvd")
+	p_file = File("results/exa_pressure.pvd")
+	for tcur in np.linspace(TsP.t0,TsP.tE,11):
+		PrP.v.t = tcur
+		PrP.p.t = tcur
+		vcur = project(PrP.v,PrP.V)
+		pcur = project(PrP.p,PrP.Q)
+		u_file << vcur, tcur
+		p_file << pcur, tcur
+
 
 def setget_velbcs_zerosq(mesh, V):
 	# Boundaries
@@ -161,6 +179,7 @@ class UpFiles(object):
 		else:
 			self.u_file = File("results/velocity.pvd")
 			self.p_file = File("results/pressure.pvd")
+
 
 if __name__ == '__main__':
 	solve_stokesTimeDep()

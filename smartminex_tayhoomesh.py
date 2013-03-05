@@ -160,4 +160,4 @@ def get_B2_bubbleinds(N, V, mesh):
 				BD[CC+2*iCR+CI+1,3]])
 			VelBubsChoice = np.append(VelBubsChoice,ClusCont)
 
-	return VelBubsChoice
+	return VelBubsChoice.astype(int)

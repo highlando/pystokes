@@ -11,23 +11,25 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
-def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP):
+def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
 
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
 
-	# Sort and flatten the B2BubInds
-	B2BubInds = np.sort(B2BubInds, axis=None)
+	# Sort and flatten the B2BubBool
+	#B2BubBool = np.sort(B2BubBool, axis=None).astype(int)
 
-	# the complement of the bubble index
-	BubIndC = np.setdiff1d(B2BubInds,range(Nv))
+	# the complement of the bubble index in the inner nodes
+	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
+	# the bubbles as indices
+	B2BI = np.arange(len(B2BubBool))[B2BubBool]
 
 	# Reorder the matrices for smart min ext
-	MSme = col_columns_atend(Mc, B2BubInds)
-	ASme = col_columns_atend(Ac, B2BubInds)
-	BSme = col_columns_atend(Bc, B2BubInds)
+	MSme = col_columns_atend(Mc, B2BI)
+	ASme = col_columns_atend(Ac, B2BI)
+	BSme = col_columns_atend(Bc, B2BI)
 
 	BTSme = BSme.T
 
@@ -46,12 +48,13 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP):
 	# cf. preprint
 
 	IterA1 = sps.hstack([sps.hstack([M1Sme,dt*M2Sme]),
-		sps.hstack([-dt*BTSme[:,1:],sps.zeros((Nv,Np-1))])])
+		sps.hstack([-dt*BTSme[:,1:],sps.csr_matrix((Nv,Np-1))])])
 
 	IterA2 = sps.hstack([sps.hstack([B1Sme,dt*B2Sme]),
-		sps.zeros((Np-1, 2*(Np-1)))])
+		sps.csr_matrix((Np-1, 2*(Np-1)))])
 
-	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.zeros((Np-1,2*(Np-1)))]),
+	
+	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
 		B2Sme])
 
 	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
@@ -61,7 +64,12 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP):
 	TsP.UpFiles.p_file << p, tcur
 
 	vp_old = vp_init
-	vp_old1 = vp_init[BubIndC,]
+	v_old1 = vp_init[BubIndC,]
+	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+], cf. preprint
+	qqpq_old = np.zeros((Nv+2*(Np-1),1))
+	qqpq_old[:Nv-(Np-1),] = v_old1
+	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
 
 	ContiRes, VelEr, PEr = [], [], []
 	for etap in range(1,11):
@@ -69,19 +77,20 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubInds,PrP,TsP):
 
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
-# TODO: define fp properly
-			Iterrhs = np.vstack([M1Sme*vp_old1,
-				np.vstack([B1Sme*vp_old1,fp[1:,]])]) \
-					+ dt*np.vstack([fvbc+CurFv-Ac*v_old-ConV[PrP.invinds,],
+
+			Iterrhs = np.vstack([M1Sme*v_old1,
+				np.vstack([B1Sme*v_old1,fpbc[1:,]])]) \
+						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						np.zeros((2*(Np-1),1))])
 
-			q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,vp_old,tol=TsP.linatol)
+
+			q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol)
 			qqpq_old = np.atleast_2d(q1_tq2_p_q2_new[0]).T
 
 			# Extract the 'actual' velocity and pressure
 			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
 								  qqpq_old[-(Np-1):,]])
-			vc = revert_sort_tob2(vcSmaMin,B2BubInds)
+			vc = revert_sort_tob2(vcSmaMin,B2BI)
 
 			pc = qqpq_old[Nv:Nv+Np-1,]
 			
@@ -121,7 +130,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	IterAv = sps.hstack([Mc+dt*Ac,-dt*BTc[:,:-1]])
+	IterAv = sps.hstack([Mc+1*dt*Ac,-dt*BTc[:,:-1]])
 	#-dt*Bc = conti mult. by -dt, to make it symmetric for using minres
 	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
@@ -325,17 +334,19 @@ def revert_sort_tob2(v,ColInd):
 
 	invertible"""
 	vra = np.zeros((len(v),1))
-	ColIndC = setdiff1d(ColInd,range(len(v)))
+	ColIndC = np.setdiff1d(range(len(v)),ColInd)
 	vra[ColInd,] = v[len(ColIndC):,]
 	vra[ColIndC,] = v[:len(ColIndC),]
 
 	return vra
 
-def col_columns_atend(SparMat,ColInd):
-	"""get a sparse matrix and a vector containing indices
+def col_columns_atend(SparMat, ColInd):
+	"""Shifts a set of columns of a sparse matrix to the right end.
+	
+	It takes a sparse matrix and a vector containing indices
+	of columns which are appended at the right end 
+	of the matrix while the remaining columns are shifted to left.
 
-	of columns that are appended at the right end 
-	of the matrix. The remaining columns are shifted to left.
 	"""
 	
 	mat_csr = sps.csr_matrix(SparMat)
@@ -346,10 +357,14 @@ def col_columns_atend(SparMat,ColInd):
 
 	for i in range(len(ColInd)):
 		subind = ColIndC[i]
+
+		# filter out the current column
 		idx   = np.where(mat_csr.indices == subind)
-		# shift all columns of higher index by one to the left
+
+		# shift all columns that were on the right by one to the left
 		idxp  = np.where(mat_csr.indices >= subind)
 		mat_csr.indices[idxp] -= 1
+
 		# and adjust the ColInds for the replacement
 		idsp = np.where(ColIndC >= subind)
 		ColIndC[idsp] -= 1
@@ -357,7 +372,8 @@ def col_columns_atend(SparMat,ColInd):
 		# append THE column at the end
 		mat_csr.indices[idx] = MatWid - 1
 		
-		return mat_csr
+	return mat_csr
+
 
 def init_time_stepping(PrP,TsP):
 	"""what every method starts with """

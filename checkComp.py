@@ -1,40 +1,16 @@
-import scipy.sparse 
+from time_int_schemes import col_columns_atend 
 import numpy as np
+import scipy.sparse as sps
 
-# test matrix
-mat = np.zeros((5,5))
-mat[[1, 2, 3, 3], [0, 2, 2, 4]] = 1
-mat = scipy.sparse.lil_matrix(mat)
+N = 5 
+n = 2
+col = np.arange(0,N,n)
+v = np.arange(N)
+mat = sps.spdiags(v,[0],N,N+len(col))
 
-# which columns to collect at the end of the matrix
-sub = np.array([0,2])
+MatRa = col_columns_atend(mat,col)
+vra = np.append(v,col)
+va  = np.append(v,0*col)
+vra[col] = 0
 
-def col_columns_atend(SparMat,ColInd):
-	"""get a sparse matrix and a vector containing indices
 
-	of columns that are appended at the right end 
-	of the matrix. The remaining columns are shifted to left.
-	"""
-	
-	mat_csr = scipy.sparse.csr_matrix(SparMat)
-	MatWid = mat_csr.shape[1]
-
-	# ColInd should not be altered
-	ColIndC = np.copy(ColInd)
-
-	for i in range(len(ColInd)):
-		subind = ColInd[i]
-		idx   = np.where(mat_csr.indices == subind)
-		# shift all columns of higher index by one to the left
-		idxp  = np.where(mat_csr.indices >= subind)
-		mat_csr.indices[idxp] -= 1
-		# and adjust the ColInds for the replacement
-		idsp = np.where(ColInd >= subind)
-		sub[idsp] -= 1
-
-		# append THE column at the end
-		mat_csr.indices[idx] = MatWid - 1
-		
-		return mat_csr
-
-print mat_csr.todense()
