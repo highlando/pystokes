@@ -5,6 +5,7 @@ import scipy.sparse as sps
 class TestSequenceFunctions(unittest.TestCase):
 
 	def test_collectB2(self):
+
 		from time_int_schemes import col_columns_atend
 		
 		N = 100
@@ -18,8 +19,11 @@ class TestSequenceFunctions(unittest.TestCase):
 		va  = np.append(v,0*col)
 		vra[col] = 0
 
-		
 		self.assertTrue(np.allclose(MatRa*vra,mat*va))
+
+	def test_nse_solution(self):
+		import test_time_schemes as tts
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -13,13 +13,13 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method):
 		self.t0 = 0
-		self.tE = 02.0e-1
+		self.tE = 5.0e-1
 		self.Nts = 64
-		self.Ntslist = [128, 256, 512, 1024]
+		self.Ntslist = [16]#128, 256, 512, 1024]
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-7
+		self.linatol = 1e-8
 
 def solve_stokesTimeDep():
 	"""system to solve
@@ -29,8 +29,8 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 20 
-	method = 2
+	N = 10 
+	method = 3
 
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 

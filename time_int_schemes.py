@@ -3,6 +3,7 @@ import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 from scipy.linalg import qr
+import pyamglina
 
 import dolfin_to_nparrays as dtn
 
@@ -36,6 +37,13 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	# here the first pressure dof is set zero
 	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
 	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
+
+	print np.linalg.cond(B2Sme.todense())
+	
+#	raise Warning('debugggg')
+	if pyamglina.condest(B2Sme,tol=1e-6,maxiter=1e5) > 1e5:
+		raise Warning('Check B2 - it should be invertible - est. cond is > 1e5')
+
 	M1Sme = MSme[:,:Nv-(Np-1)]
 	M2Sme = MSme[:,Nv-(Np-1):]
 	
@@ -58,7 +66,7 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 		B2Sme])
 
 	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
-
+	
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
@@ -83,16 +91,24 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						np.zeros((2*(Np-1),1))])
 
+			print np.linalg.norm(Iterrhs)
 
-			q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol)
-			qqpq_old = np.atleast_2d(q1_tq2_p_q2_new[0]).T
+			q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs)#,qqpq_old,tol=TsP.linatol)
+			qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
+			print np.linalg.norm(qqpq_old)
 
 			# Extract the 'actual' velocity and pressure
 			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
 								  qqpq_old[-(Np-1):,]])
-			vc = revert_sort_tob2(vcSmaMin,B2BI)
 
+			#raise Warning('debugggg')
+			vc = revert_sort_tob2(vcSmaMin,B2BI)
 			pc = qqpq_old[Nv:Nv+Np-1,]
+
+			vp_old = np.vstack([vc,pc])
+
+
+			v_old1 = qqpq_old[:Nv-(Np-1),]
 			
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
 			
