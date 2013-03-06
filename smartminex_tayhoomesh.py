@@ -71,7 +71,7 @@ def get_ij_subgrid(k,N):
 	i = (k-j)/n
 	return j, i
 
-def get_B2_bubbleinds(N, V, mesh):
+def get_B2_bubbleinds(N, V, mesh, Q=None):
 	"""compute the indices of bubbels that set up
 
 	the invertible B2. This function is specific for the 
@@ -86,18 +86,21 @@ def get_B2_bubbleinds(N, V, mesh):
 	# This will be the array of 
 	# [x y dofx dofy]
 
+	if Q is None:
+		Q = V
+
 	for (i, cell) in enumerate(cells(mesh)):
-		#print "Global dofs associated with cell %d: " % i,
-		#print V.dofmap().cell_dofs(i)
+		# print "Global dofs associated with cell %d: " % i,
+		# print Q.dofmap().cell_dofs(i)
+		# print "The Dof coordinates:",
+		# print Q.dofmap().tabulate_coordinates(cell)
 		Cdofs = V.dofmap().cell_dofs(i)
-		#print "The Dof coordinates:",
-		#print V.dofmap().tabulate_coordinates(cell)
 		Coos = V.dofmap().tabulate_coordinates(cell)
 
 		# We sort out the bubble functions - dofs on edge midpoints 
 		# In every cell the bubbles are numbered 4th-6th (x)
 		# and 10th-12th (y-comp)
-		CelBubDofs = np.vstack([Cdofs[3:6],Cdofs[9:12]]).T
+		CelBubDofs = np.vstack([Cdofs[9:12],Cdofs[3:6]]).T
 		CelBubCoos = Coos[3:6]
 
 		BubDofs[i*3:(i+1)*3,:] = np.hstack([CelBubCoos,CelBubDofs]) 
@@ -120,10 +123,11 @@ def get_B2_bubbleinds(N, V, mesh):
 	BubDofs = BubDofs[~IndBorBub,:]
 
 	# sort by y coordinate
-	BubDofs = BubDofs[BubDofs[:,1].argsort()]
-	# and by x
-	BubDofs = BubDofs[BubDofs[:,0].argsort()]
+	BubDofs = BubDofs[BubDofs[:,1].argsort(kind='mergesort')]
+	# and by x !!! necessarily by mergesort
+	BubDofs = BubDofs[BubDofs[:,0].argsort(kind='mergesort')]
 	# no we have lexicographical order first y then x
+
 
 	### identify the bubbles of choice
 	BD = BubDofs
@@ -143,7 +147,7 @@ def get_B2_bubbleinds(N, V, mesh):
 			BD[2*iCR+CI+1,3]])
 		VelBubsChoice = np.append(VelBubsChoice,ClusCont)
 
-	# loop over the 
+	# loop over the columns
 	for jCR in range(1,N-1):
 		CC = (2*jCR)*2*(N-1) #current column
 		# first cluster separate

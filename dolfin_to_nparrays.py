@@ -122,7 +122,7 @@ def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	# extract the inner nodes equation coefficients
 	Mc = Ma[innerinds,:][:,innerinds]
 	Ac = Aa[innerinds,:][:,innerinds]
-	fvbc= fv[innerinds,:]
+	fvbc= fvbc[innerinds,:]
 	Bc  = Ba[:,innerinds]
 	BTc = BTa[innerinds,:]
 
