@@ -6,9 +6,9 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 
 	def setUp(self):
 		# for NSE solution
-		self.Nlist = [8, 16, 32]
+		self.Nlist = [16, 32, 64] # set up for three values that doubles
 		self.tcur = 0.5
-		self.OC = 6 # = order of convergence + 2, for not scaling by M^-1 
+		self.OC = 3 - 0.01 # = order of convergence minus a threshold
 
 	def test_collectB2(self):
 
@@ -50,8 +50,8 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			#uc = np.atleast_2d(ua[invinds].T)
 			return ua
 
-		eoca = []
-		eocc = []
+		eoca = np.zeros(len(self.Nlist))
+		eocc = np.zeros(len(self.Nlist))
 
 		for k, N in enumerate(self.Nlist):
 			PrP = tts.ProbParams(N)
@@ -74,7 +74,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			vc = get_funcexpr_as_vec(v, PrP.V, t=tcur)
 			pc = get_funcexpr_as_vec(p, PrP.Q, t=tcur)
 
-			vdotc = get_funcexpr_as_vec(vdot, PrP.V, t=tcur)
+			vdotc = get_funcexpr_as_vec(vdot, PrP.V, t=tcur )
 
 			v.t = tcur
 			vf = project(v, PrP.V)
@@ -83,15 +83,17 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			resV = Ma*vdotc + nu*Aa*vc + ConV[:,0] - BTa*pc - fv[:,0]
 			resVc = Mc*vdotc[invinds] + nu*Ac*vc[invinds] + ConV[invinds,0] - BTc*pc - fvbc[:,0] - fv[invinds,0]
 
-			eoca.append(np.dot(np.atleast_2d(resV[invinds]),Mc*np.atleast_2d(resV[invinds]).T))
-			eocc.append(np.dot(np.atleast_2d(resVc),Mc*np.atleast_2d(resVc).T))
+			eoca[k] = (np.sqrt(np.dot(np.atleast_2d(resV[invinds]),Mc*np.atleast_2d(resV[invinds]).T)))
+			eocc[k] = (np.sqrt(np.dot(np.atleast_2d(resVc),Mc*np.atleast_2d(resVc).T)))
 
-		eocs = [log(eoca[0]/eoca[1]), log(eoca[1]/eoca[2]), log(eocc[0]/eocc[1]), log(eocc[1]/eocc[2])] 
-		print eocs
+		eocs = np.array([log(eoca[0]/eoca[1]), log(eoca[1]/eoca[2]), log(eocc[0]/eocc[1]), log(eocc[1]/eocc[2])])
 
 		OC = self.OC
 
-		self.assertTrue(eocs > [OC*log(2)]*4 )
+		print eocs
+		print np.array([OC*log(2)]*4)
+
+		self.assertTrue((eocs > [np.array([OC*log(2)])]*4 ).all())
 
 	def test_eul_solution(self):
 		from dolfin import project
@@ -112,8 +114,8 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			#uc = np.atleast_2d(ua[invinds].T)
 			return ua
 
-		eoca = []
-		eocc = []
+		eoca = np.zeros(len(self.Nlist))
+		eocc = np.zeros(len(self.Nlist))
 
 		for k, N in enumerate(self.Nlist):
 			PrP = tts.ProbParams(N)
@@ -145,14 +147,17 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			resV = Ma*vdotc + nu*Aa*vc + ConV[:,0] - BTa*pc - fv[:,0]
 			resVc = Mc*vdotc[invinds] + nu*Ac*vc[invinds] + ConV[invinds,0] - BTc*pc - fvbc[:,0] - fv[invinds,0]
 
-			eoca.append(np.dot(np.atleast_2d(resV[invinds]),Mc*np.atleast_2d(resV[invinds]).T))
-			eocc.append(np.dot(np.atleast_2d(resVc),Mc*np.atleast_2d(resVc).T))
+			eoca[k] = (np.sqrt(np.dot(np.atleast_2d(resV[invinds]),Mc*np.atleast_2d(resV[invinds]).T)))
+			eocc[k] = (np.sqrt(np.dot(np.atleast_2d(resVc),Mc*np.atleast_2d(resVc).T)))
 
-		eocs = [log(eoca[0]/eoca[1]), log(eoca[1]/eoca[2]), log(eocc[0]/eocc[1]), log(eocc[1]/eocc[2])] 
-		
+		eocs = np.array([log(eoca[0]/eoca[1]), log(eoca[1]/eoca[2]), log(eocc[0]/eocc[1]), log(eocc[1]/eocc[2])])
+
 		OC = self.OC
 
-		self.assertTrue(eocs > [OC*log(2)]*4 )
+		print eocs
+		print np.array([OC*log(2)]*4)
+
+		self.assertTrue((eocs > [np.array([OC*log(2)])]*4 ).all())
 
 
 if __name__ == '__main__':
