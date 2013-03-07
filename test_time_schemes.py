@@ -175,7 +175,12 @@ class ProbParams(object):
 		self.fp = Constant((0))
 		self.fv = Expression(("40*nu*pow(x[0],2)*pow(x[1],3)*sin(t) - 60*nu*pow(x[0],2)*pow(x[1],2)*sin(t) + 24*nu*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*sin(t) + 20*nu*pow(x[0],2)*x[1]*sin(t) - 12*nu*pow(x[0],2)*pow((x[0] - 1),2)*sin(t) - 32*nu*x[0]*pow(x[1],3)*sin(t) + 48*nu*x[0]*pow(x[1],2)*sin(t) - 16*nu*x[0]*x[1]*sin(t) + 8*nu*pow(x[1],3)*pow((x[0] - 1),2)*sin(t) - 12*nu*pow(x[1],2)*pow((x[0] - 1),2)*sin(t) + 4*nu*x[1]*pow((x[0] - 1),2)*sin(t) - 4*pow(x[0],3)*pow(x[1],2)*pow((x[0] - 1),3)*(2*x[0] - 1)*pow((x[1] - 1),2)*(2*x[1]*(x[1] - 1) + x[1]*(2*x[1] - 1) + (x[1] - 1)*(2*x[1] - 1) - 2*pow((2*x[1] - 1),2))*pow(sin(t),2) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*cos(t) + 6*pow(x[0],2)*pow(x[1],2)*pow((x[0] - 1),2)*cos(t) - 2*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*cos(t) + 2*x[0]*pow(x[1],2)*sin(t) - 2*x[0]*x[1]*sin(t) - pow(x[1],2)*sin(t) + x[1]*sin(t)", "-40*nu*pow(x[0],3)*pow(x[1],2)*sin(t) + 32*nu*pow(x[0],3)*x[1]*sin(t) - 8*nu*pow(x[0],3)*pow((x[1] - 1),2)*sin(t) + 60*nu*pow(x[0],2)*pow(x[1],2)*sin(t) - 48*nu*pow(x[0],2)*x[1]*sin(t) + 12*nu*pow(x[0],2)*pow((x[1] - 1),2)*sin(t) - 24*nu*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*sin(t) - 20*nu*x[0]*pow(x[1],2)*sin(t) + 16*nu*x[0]*x[1]*sin(t) - 4*nu*x[0]*pow((x[1] - 1),2)*sin(t) + 12*nu*pow(x[1],2)*pow((x[1] - 1),2)*sin(t) + 4*pow(x[0],3)*pow(x[1],2)*pow((x[1] - 1),2)*cos(t) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*pow((x[1] - 1),3)*(2*x[1] - 1)*(2*x[0]*(x[0] - 1) + x[0]*(2*x[0] - 1) + (x[0] - 1)*(2*x[0] - 1) - 2*pow((2*x[0] - 1),2))*pow(sin(t),2) - 6*pow(x[0],2)*pow(x[1],2)*pow((x[1] - 1),2)*cos(t) + 2*pow(x[0],2)*x[1]*sin(t) - pow(x[0],2)*sin(t) + 2*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*cos(t) - 2*x[0]*x[1]*sin(t) + x[0]*sin(t)"), t=0, nu=self.nu)
 
-		self.v = Expression(("sin(t)*x[0]*x[0]*(1 - x[0])*(1 - x[0])*2*x[1]*(1 - x[1])*(2*x[1] - 1)", "sin(t)*x[1]*x[1]*(1 - x[1])*(1 - x[1])*2*x[0]*(1 - x[0])*(1 - 2*x[0])"), t = 0)
+		self.v = Expression((
+			"sin(t)*x[0]*x[0]*(1 - x[0])*(1 - x[0])*2*x[1]*(1 - x[1])*(2*x[1] - 1)", 
+			"sin(t)*x[1]*x[1]*(1 - x[1])*(1 - x[1])*2*x[0]*(1 - x[0])*(1 - 2*x[0])"), t = 0)
+		self.vdot = Expression((
+			"cos(t)*x[0]*x[0]*(1 - x[0])*(1 - x[0])*2*x[1]*(1 - x[1])*(2*x[1] - 1)",
+			"cos(t)*x[1]*x[1]*(1 - x[1])*(1 - x[1])*2*x[0]*(1 - x[0])*(1 - 2*x[0])"), t = 0)
 		self.p =  Expression(("sin(t)*x[0]*(1-x[0])*x[1]*(1-x[1])"), t = 0)
 
 		bcinds = []
