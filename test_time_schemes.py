@@ -14,13 +14,13 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = 1.0e-1
+		self.tE = 1.0
 		self.Nts = 64
-		self.Ntslist = [16, 32, 64, 128]#, 256]#, 512]#, 1024]
+		self.Ntslist = [16, 32]#, 64]#, 128]#, 256]#, 512]#, 1024]
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-8 #1e-8   # 0 for direct sparse solver
+		self.linatol = 1e-6 #1e-8   # 0 for direct sparse solver
 		self.UseRealPress = True
 		self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
@@ -38,7 +38,8 @@ def solve_stokesTimeDep():
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
 			2:'HalfExpEulInd2',
-			3:'HalfExpEulSmaMin'}
+			3:'HalfExpEulSmaMin',
+			4:'HalfExpEulSmaMinSplit'}
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
 	PrP = ProbParams(N)
@@ -78,7 +79,7 @@ def solve_stokesTimeDep():
 			tis.qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
 		elif method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
-		elif method == 3:
+		else:
 			# get the indices of the bubbles of B2
 			# the 1st pressure dof is the one that is removed
 			B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
@@ -87,7 +88,12 @@ def solve_stokesTimeDep():
 			B2BubBool = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
 			#B2BubInds = np.arange(len(B2BubIndsBool
 
-			tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
+			if method == 3:
+				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
+			elif method == 4:
+				tis.halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
+	
+	plot_errs_res(TsP)
 		
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
@@ -99,6 +105,7 @@ def solve_stokesTimeDep():
 
 def plot_errs_res(TsP):
 
+	plt.close('all')
 	for i in range(len(TsP.Ntslist)):
 		fig1 = plt.figure(1)
 		plt.plot(TsP.Residuals.ContiRes[i])

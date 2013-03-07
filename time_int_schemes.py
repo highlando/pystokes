@@ -24,9 +24,6 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
 
-	# Sort and flatten the B2BubBool
-	#B2BubBool = np.sort(B2BubBool, axis=None).astype(int)
-
 	# the complement of the bubble index in the inner nodes
 	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
 	# the bubbles as indices
@@ -34,20 +31,11 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 
 	# Reorder the matrices for smart min ext
 	MSme = col_columns_atend(Mc, B2BI)
-	ASme = col_columns_atend(Ac, B2BI)
 	BSme = col_columns_atend(Bc, B2BI)
-
-	BTSme = BSme.T
 
 	# here the first pressure dof is set zero
 	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
 	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
-
-	#print np.linalg.cond(B2Sme.todense())
-	
-#	raise Warning('debugggg')
-	#if pyamglina.condest(B2Sme,tol=1e-6,maxiter=1e5) > 1e5:
-		#raise Warning('Check B2 - it should be invertible - est. cond is > 1e5')
 
 	M1Sme = MSme[:,:Nv-(Np-1)]
 	M2Sme = MSme[:,Nv-(Np-1):]
@@ -70,25 +58,26 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	# 						  q2
 	#
 
-	IterA1 = sps.hstack([sps.hstack([M1Sme, dt*M2Sme]), -dt*BTc[:,1:]])
-	IterA2 = sps.hstack([sps.hstack([B1Sme, dt*B2Sme]), sps.csr_matrix((Np-1, Np-1))])
-	
+	IterAqq = sps.hstack([Mc,-dt*BTc[:,:-1]])
+	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	# multiplied by -dt for symmetry
+
+	IterA  = sps.vstack([IterAqq,IterAp])
+
 	#IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]), B2Sme])
 
-	IterA = sps.vstack([IterA1,IterA2])
-	
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
 	vp_old = vp_init
-	v_old1 = vp_init[BubIndC,]
-	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled, cf. preprint
-	qqp_old = np.zeros((Nv+Np-1,1))
-	qqp_old[:Nv-(Np-1),] = v_old1
-	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	q1_old = vp_init[BubIndC,]
+	q2_old = vp_init[B2BubBool,]
 
-	#qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
+	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
+	qqp_old = np.zeros((Nv+Np-1,1))
+	qqp_old[:Nv-(Np-1),] = q1_old
+	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
@@ -98,35 +87,36 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 		for i in range(Nts/10):
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
-#,fpbc[1:,]])]) 
-			# TODO: implement \dot g
 
-			gdot = np.zeros((Np-1,1))
-			Iterrhs = np.vstack([M1Sme*v_old1, B1Sme*v_old1]) \
-						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
+			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
+
+			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
+						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
 
 			if TsP.linatol == 0:
-				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
-				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
+				q1_tq2_p_new = spsla.spsolve(IterA,Iterrhs) 
+				qqp_old = np.atleast_2d(q1_tq2_p_new).T
 			else:
-				q1_tq2_p_new = krypy.linsys.gmres(IterA, Iterrhs,
-						x0=qqpq_old, Ml=Ml, Mr=Mr, tol=TsP.linatol, max_restarts=100, maxiter=100)#,restart=20)
-				# q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol,restart=20)
+				q1_tq2_p_new = krypy.linsys.minres(IterA, Iterrhs,
+						x0=qqp_old, tol=TsP.linatol) 
 
-				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
+				qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
+				q1_old = qqp_old[BubIndC,]
+
+				ret = krypy.linsys.gmres(B2Sme, -B1Sme*q1_old + fpbc[1:,], x0=q2_old, maxiter=20, max_restarts=50)
+				q2_old = ret['xk']
+
+				# q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
+				# q2_old = np.atleast_2d(q2_old).T
 
 			# Extract the 'actual' velocity and pressure
-			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
-								  qqpq_old[-(Np-1):,]])
+			qcSmaMin = np.vstack([q1_old, q2_old])
 
-			#raise Warning('debugggg')
-			vc = revert_sort_tob2(vcSmaMin,B2BI)
-			pc = qqpq_old[Nv:Nv+Np-1,]
+			vc = revert_sort_tob2(qcSmaMin,B2BI)
+
+			pc = qqp_old[Nv:Nv+Np-1,]
 
 			vp_old = np.vstack([vc,pc])
-
-
-			v_old1 = qqpq_old[:Nv-(Np-1),]
 			
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
 			
