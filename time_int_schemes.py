@@ -294,10 +294,10 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
-	for etap in range(1,TsP.SampInt +1 ):
+	for etap in range(1,TsP.SampInt + 1 ):
 		for i in range(Nts/TsP.SampInt):
 
-			vp_old[Nv:,0] = 0 
+			#vp_old[Nv:,0] = 0 
 
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
@@ -331,8 +331,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
 
-		#TsP.UpFiles.u_file << v, tcur
-		#TsP.UpFiles.p_file << p, tcur
+		if TsP.ParaviewOutput:
+			TsP.UpFiles.u_file << v, tcur
+			TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
@@ -492,7 +493,7 @@ def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None, pdof=None):
 	elif pdof is 0:
 		pe = np.vstack([[0],pc])
 	else:
-		raise Warning('not implemented yet')
+		pe = np.vstack([pc[:pdof],np.vstack([[0.02],pc[pdof:]])])
 
 	v.vector().set_local(ve)
 	p.vector().set_local(pe)

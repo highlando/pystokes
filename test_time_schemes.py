@@ -14,7 +14,7 @@ class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
 		self.tE = 6.0
-		self.Ntslist = [512]#, 1024, 2048]
+		self.Ntslist = [256]#512]#, 1024, 2048]
 		self.SampInt = self.Ntslist[0]/8
 		self.method = method
 		self.UpFiles = UpFiles(method)
@@ -31,7 +31,7 @@ def solve_stokesTimeDep(method=None):
 	
 	"""
 
-	N = 32 
+	N = 20 
 
 	if method is None:
 		method = 2
