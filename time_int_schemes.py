@@ -294,9 +294,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
 	for etap in range(1,11):
-		for i in range(Nts/10):
+		for i in range(Nts/8):
 
-			vp_old[Nv:,0] = 0 
+			#vp_old[Nv:,0] = 0 
 
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
@@ -315,6 +315,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
 
 			tcur += dt
+			print 'Time is now: %0.2f' % tcur
 
 			# if TsP.UseRealPress:
 			# 	PrP.p.t = tcur - dt
@@ -325,13 +326,13 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 		# the errors  
 		vCur, pCur = PrP.v, PrP.p 
-		vCur.t = tcur
+		vCur.t = tcur 
 		pCur.t = tcur - dt
 
 		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
 
-		TsP.UpFiles.u_file << v, tcur
-		TsP.UpFiles.p_file << p, tcur
+		#TsP.UpFiles.u_file << v, tcur
+		#TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))

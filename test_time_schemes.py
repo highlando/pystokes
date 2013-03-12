@@ -14,14 +14,13 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = 1.0
+		self.tE = 4.0
 		self.Nts = 64
-		self.Ntslist = [16, 32]#, 64]#, 128]#, 256]#, 512]#, 1024]
+		self.Ntslist = [8, 16, 32, 64]#, 128] #, 256]#, 512]#, 1024]
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
 		self.linatol = 1e-6 #1e-8   # 0 for direct sparse solver
-		self.UseRealPress = True
 		self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
 def solve_stokesTimeDep():
@@ -32,7 +31,7 @@ def solve_stokesTimeDep():
 	
 	"""
 
-	N = 32 
+	N = 20
 	method = 2
 
 	methdict = {0:'ImpEulFull', 
@@ -102,6 +101,10 @@ def solve_stokesTimeDep():
 	#p_file << p, 1
 
 	return TsP, PrP
+
+def save_simu(TsP,PrP):
+
+	return
 
 def plot_errs_res(TsP):
 
