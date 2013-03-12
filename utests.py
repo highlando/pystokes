@@ -6,7 +6,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 
 	def setUp(self):
 		# for NSE solution
-		self.Nlist = [16, 32, 64] # set up for three values that doubles
+		self.Nlist = [8, 16, 32]#, 64] # set up for three values that doubles
 		self.tcur = 0.5
 		self.OC = 3 - 0.01 # = order of convergence minus a threshold
 
@@ -30,6 +30,73 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		vra = np.r_[v[~colI],v[col]]
 
 		self.assertTrue(np.allclose(MatRa*vra, mat*v))
+
+	def test_rearrange_matrices(self):
+		from dolfin import project
+		import test_time_schemes as tts
+		from time_int_schemes import col_columns_atend
+		import dolfin_to_nparrays as dtn
+		import smartminex_tayhoomesh
+
+		N = 16 
+		PrP = tts.ProbParams(N)
+
+		Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
+		fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
+
+		Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
+				dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
+
+		B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
+		# we need the B2Bub indices in the reduced setting vc
+		# this gives a masked array of boolean type
+		B2BubBool = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+		#B2BubInds = np.arange(len(B2BubIndsBool
+
+		Nv = len(invinds)
+		Np = PrP.Q.dim()
+		dt = 1.0/N
+
+		# the complement of the bubble index in the inner nodes
+		BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
+		# the bubbles as indices
+		B2BI = np.arange(len(B2BubBool))[B2BubBool]
+
+		# Reorder the matrices for smart min ext
+		MSme = col_columns_atend(Mc, B2BI)
+		BSme = col_columns_atend(Bc, B2BI)
+
+		B1Sme = BSme[:,:Nv-(Np-1)]
+		B2Sme = BSme[:,Nv-(Np-1):]
+
+		M1Sme = MSme[:,:Nv-(Np-1)]
+		M2Sme = MSme[:,Nv-(Np-1):]
+
+		IterA1 = sps.hstack([sps.hstack([M1Sme,dt*M2Sme]), -dt*BTc[:,1:]])
+
+		IterA2 = sps.hstack([sps.hstack([B1Sme[1:,:],dt*B2Sme[1:,:]]),
+			sps.csr_matrix((Np-1, (Np-1)))])
+		# The rearranged coefficient matrix
+		IterARa = sps.vstack([IterA1,IterA2])
+	
+		IterAqq = sps.hstack([Mc,-dt*BTc[:,1:]])
+		IterAp = sps.hstack([Bc[1:,:],sps.csr_matrix((Np-1,Np-1))])
+		# The actual coefficient matrix
+		IterA  = sps.vstack([IterAqq,IterAp])
+
+		rhs = np.random.random((Nv+Np-1,1))
+
+		SolActu = sps.linalg.spsolve(IterA,rhs)
+		SolRa   = sps.linalg.spsolve(IterARa,rhs)
+
+		SortBack = np.zeros((Nv+Np-1,1))
+		
+		SortBack[:Nv-(Np-1),0] = SolRa[BubIndC]
+		SortBack[Nv-(Np-1):Nv,0] = dt*SolRa[B2BI]
+		SortBack[Nv:,0] = SolRa[Nv:]
+
+		self.assertTrue(np.allclose(SolActu,SortBack,atol=1e-6))
+
 
 	def test_nse_solution(self):
 		from dolfin import project
