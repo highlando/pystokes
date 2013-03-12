@@ -14,9 +14,9 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = 6.0
-		self.Ntslist = [1024, 2048]
-		self.SampInt = self.Ntslist[0]/32
+		self.tE = 3.0
+		self.Ntslist = [64, 128]#, 256, 512, 1024]#, 2048]
+		self.SampInt = self.Ntslist[0]/4
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
@@ -24,7 +24,7 @@ class TimestepParams(object):
 		self.ParaviewOutput = True
 		#self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
-def solve_stokesTimeDep(method=None, N=None):
+def solve_stokesTimeDep(method=None, N=None, NtsList=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -37,7 +37,7 @@ def solve_stokesTimeDep(method=None, N=None):
 
 	if method is None:
 		method = 2
-
+	
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
 			2:'HalfExpEulInd2',
@@ -49,6 +49,9 @@ def solve_stokesTimeDep(method=None, N=None):
 
 	# instantiate the Time Int Parameters
 	TsP = TimestepParams(methdict[method], N)
+
+	if NtsList is not None:
+		TsP.Ntslist = NtsList
 
 	print 'Mesh parameter N = %d' % N
 	print 'You have chosen %s for time integration' % methdict[method]
@@ -128,6 +131,7 @@ def save_simu(TsP, PrP):
 	import json
 
 	DictOfVals = {'SpaceDiscParam': PrP.N,
+			'Omega': PrP.omega,
 			'TimeInterval':[TsP.t0,TsP.tE],
 			'TimeDiscs': TsP.Ntslist,
 			'LinaTol': TsP.linatol,
@@ -136,7 +140,7 @@ def save_simu(TsP, PrP):
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
 
-	f = open('json/Tol%0.0eNTs%dto%dMesh%d' % (TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json', 'w')
+	f = open('json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json', 'w')
 	f.write(json.dumps(DictOfVals))
 	return
 
@@ -153,15 +157,15 @@ def merge_json_dicts(CurDi,DiToAppend):
 	Jsc = load_json_dicts(CurDi)
 	Jsa = load_json_dicts(DiToAppend)
 
-	if Jsc['SpaceDiscParam'] != Jsa['SpaceDiscParam']:
-		raise Warning('Space discretization does not match')
+	if Jsc['SpaceDiscParam'] != Jsa['SpaceDiscParam'] or Jsc['Omega'] != Jsa['Omega']:
+		raise Warning('Space discretization or omega do not match')
 
 	Jsc['TimeDiscs'].extend(Jsa['TimeDiscs'])
 	Jsc['ContiRes'].extend(Jsa['ContiRes'])
 	Jsc['VelEr'].extend(Jsa['VelEr'])
 	Jsc['PEr'].extend(Jsa['PEr'])
 
-	f = open('json/MrgdTol%0.0eNTs%dto%dMesh%d' % (Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json', 'w')
+	f = open('json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json', 'w')
 	f.write(json.dumps(Jsc))
 
 	return Jsc
@@ -258,7 +262,7 @@ class ProbParams(object):
 		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
 		self.Q = FunctionSpace(self.mesh, "CG", 1)
 		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
-		self.omega = 2
+		self.omega = 3
 		self.nu = 0
 		self.fp = Constant((0))
 		self.fv = Expression(("40*nu*pow(x[0],2)*pow(x[1],3)*sin(omega*t) - 60*nu*pow(x[0],2)*pow(x[1],2)*sin(omega*t) + 24*nu*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*sin(omega*t) + 20*nu*pow(x[0],2)*x[1]*sin(omega*t) - 12*nu*pow(x[0],2)*pow((x[0] - 1),2)*sin(omega*t) - 32*nu*x[0]*pow(x[1],3)*sin(omega*t) + 48*nu*x[0]*pow(x[1],2)*sin(omega*t) - 16*nu*x[0]*x[1]*sin(omega*t) + 8*nu*pow(x[1],3)*pow((x[0] - 1),2)*sin(omega*t) - 12*nu*pow(x[1],2)*pow((x[0] - 1),2)*sin(omega*t) + 4*nu*x[1]*pow((x[0] - 1),2)*sin(omega*t) - 4*pow(x[0],3)*pow(x[1],2)*pow((x[0] - 1),3)*(2*x[0] - 1)*pow((x[1] - 1),2)*(2*x[1]*(x[1] - 1) + x[1]*(2*x[1] - 1) + (x[1] - 1)*(2*x[1] - 1) - 2*pow((2*x[1] - 1),2))*pow(sin(omega*t),2) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*omega*cos(omega*t) + 6*pow(x[0],2)*pow(x[1],2)*pow((x[0] - 1),2)*omega*cos(omega*t) - 2*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*omega*cos(omega*t) + 2*x[0]*pow(x[1],2)*sin(omega*t) - 2*x[0]*x[1]*sin(omega*t) - pow(x[1],2)*sin(omega*t) + x[1]*sin(omega*t)", "-40*nu*pow(x[0],3)*pow(x[1],2)*sin(omega*t) + 32*nu*pow(x[0],3)*x[1]*sin(omega*t) - 8*nu*pow(x[0],3)*pow((x[1] - 1),2)*sin(omega*t) + 60*nu*pow(x[0],2)*pow(x[1],2)*sin(omega*t) - 48*nu*pow(x[0],2)*x[1]*sin(omega*t) + 12*nu*pow(x[0],2)*pow((x[1] - 1),2)*sin(omega*t) - 24*nu*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*sin(omega*t) - 20*nu*x[0]*pow(x[1],2)*sin(omega*t) + 16*nu*x[0]*x[1]*sin(omega*t) - 4*nu*x[0]*pow((x[1] - 1),2)*sin(omega*t) + 12*nu*pow(x[1],2)*pow((x[1] - 1),2)*sin(omega*t) + 4*pow(x[0],3)*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*pow((x[1] - 1),3)*(2*x[1] - 1)*(2*x[0]*(x[0] - 1) + x[0]*(2*x[0] - 1) + (x[0] - 1)*(2*x[0] - 1) - 2*pow((2*x[0] - 1),2))*pow(sin(omega*t),2) - 6*pow(x[0],2)*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) + 2*pow(x[0],2)*x[1]*sin(omega*t) - pow(x[0],2)*sin(omega*t) + 2*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) - 2*x[0]*x[1]*sin(omega*t) + x[0]*sin(omega*t)"), t=0, nu=self.nu, omega = self.omega )
