@@ -58,8 +58,8 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	# 						  q2
 	#
 
-	IterAqq = sps.hstack([Mc,-dt*BTc[:,:-1]])
-	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	IterAqq = sps.hstack([Mc,-dt*BTc[:,1:]])
+	IterAp = sps.hstack([-dt*Bc[1:,:],sps.csr_matrix((Np-1,Np-1))])
 	# multiplied by -dt for symmetry
 
 	IterA  = sps.vstack([IterAqq,IterAp])
@@ -70,7 +70,7 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	vp_old = vp_init
+	vp_old = np.copy(vp_init)
 	q1_old = vp_init[BubIndC,]
 	q2_old = vp_init[B2BubBool,]
 
@@ -83,8 +83,8 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 
 	#Mr = sps.diags(np.r_[np.ones(Nv-(Np-1)), 1./dt*np.ones(Np-1), np.ones(2*(Np-1))],0)
 	#Ml = sps.diags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0)
-	for etap in range(1,11):
-		for i in range(Nts/10):
+	for etap in range(1,TsP.SampInt +1 ):
+		for i in range(Nts/TsP.SampInt):
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
@@ -103,11 +103,11 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 				qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
 				q1_old = qqp_old[BubIndC,]
 
-				ret = krypy.linsys.gmres(B2Sme, -B1Sme*q1_old + fpbc[1:,], x0=q2_old, maxiter=20, max_restarts=50)
-				q2_old = ret['xk']
+				#ret = krypy.linsys.gmres(B2Sme, -B1Sme*q1_old + fpbc[1:,], x0=q2_old, maxiter=20, max_restarts=50)
+				#q2_old = ret['xk']
 
-				# q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
-				# q2_old = np.atleast_2d(q2_old).T
+				q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
+				q2_old = np.atleast_2d(q2_old).T
 
 			# Extract the 'actual' velocity and pressure
 			qcSmaMin = np.vstack([q1_old, q2_old])
@@ -127,10 +127,11 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 		vCur.t = tcur
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
 
-		TsP.UpFiles.u_file << v, tcur
-		TsP.UpFiles.p_file << p, tcur
+		if TsP.ParaviewOutput:
+			TsP.UpFiles.u_file << v, tcur
+			TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
@@ -213,7 +214,7 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	Mr = sps.diags(np.r_[np.ones(Nv-(Np-1)), 1./dt*np.ones(Np-1), np.ones(2*(Np-1))],0)
 	Ml = sps.diags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0)
 	for etap in range(1,11):
-		for i in range(Nts/10):
+		for i in range(Nts/8):
 
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
@@ -293,8 +294,8 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
-	for etap in range(1,11):
-		for i in range(Nts/10):
+	for etap in range(1,TsP.SampInt +1 ):
+		for i in range(Nts/TsP.SampInt):
 
 			vp_old[Nv:,0] = 0 
 
@@ -328,10 +329,10 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 		vCur.t = tcur
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
 
-		TsP.UpFiles.u_file << v, tcur
-		TsP.UpFiles.p_file << p, tcur
+		#TsP.UpFiles.u_file << v, tcur
+		#TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))

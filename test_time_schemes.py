@@ -2,7 +2,6 @@ from dolfin import *
 import numpy as np
 import scipy.sparse as sps
 import matplotlib.pyplot as plt
-import pickle
 
 import dolfin_to_nparrays as dtn
 reload(dtn)
@@ -14,17 +13,17 @@ reload(smartminex_tayhoomesh)
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = 1.0
-		self.Nts = 64
-		self.Ntslist = [16, 32]#, 64]#, 128]#, 256]#, 512]#, 1024]
+		self.tE = 6.0
+		self.Ntslist = [512]#, 1024, 2048]
+		self.SampInt = self.Ntslist[0]/8
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-6 #1e-8   # 0 for direct sparse solver
-		self.UseRealPress = True
-		self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
+		self.linatol = 1e-5 #1e-8   # 0 for direct sparse solver
+		self.ParaviewOutput = True
+		#self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
-def solve_stokesTimeDep():
+def solve_stokesTimeDep(method=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -33,7 +32,9 @@ def solve_stokesTimeDep():
 	"""
 
 	N = 32 
-	method = 2
+
+	if method is None:
+		method = 2
 
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
@@ -52,8 +53,8 @@ def solve_stokesTimeDep():
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
 	#prepare for pickling the residuals
-	fpic = file(TsP.PickleFile,'w')
-	pickle.dump(TsP.Residuals, fpic)
+	# fpic = file(TsP.PickleFile,'w')
+	# pickle.dump(TsP.Residuals, fpic)
 
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
@@ -89,11 +90,14 @@ def solve_stokesTimeDep():
 			#B2BubInds = np.arange(len(B2BubIndsBool
 
 			if method == 3:
-				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
+				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,
+						vp_init,B2BubBool,PrP,TsP=TsP)
 			elif method == 4:
-				tis.halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP=TsP)
+				tis.halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,
+						vp_init,B2BubBool,PrP,TsP=TsP)
 	
 	plot_errs_res(TsP)
+	save_simu(TsP, PrP)
 		
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
@@ -101,7 +105,42 @@ def solve_stokesTimeDep():
 	# u_file << v, 1
 	#p_file << p, 1
 
-	return TsP, PrP
+	return 
+
+def save_simu(TsP, PrP):
+	import json
+
+	DictOfVals = {'SpaceDiscParam': PrP.N,
+			'TimeInterval':[TsP.t0,TsP.tE],
+			'TimeDiscs': TsP.Ntslist,
+			'LinaTol': TsP.linatol,
+			'TimeIntMeth': TsP.method,
+			'ContiRes': TsP.Residuals.ContiRes,
+			'VelEr': TsP.Residuals.VelEr,
+			'PEr': TsP.Residuals.PEr}
+
+	f = open('json/Tol%0.0eNTs%dto%dMesh%d' % (TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json', 'w')
+	f.write(json.dumps(DictOfVals))
+	return
+
+def plot_errs_fromjsdict(JsDict):
+
+	plt.close('all')
+	for i in range(len(JsDict['TimeDiscs'])):
+		fig1 = plt.figure(1)
+		plt.plot(JsDict['ContiRes'][i])
+		plt.title('Lina residual in the continuity eqn')
+		fig2 = plt.figure(2)
+		plt.plot(JsDict['VelEr'][i])
+		plt.title('Error in the velocity')
+		fig3 = plt.figure(3)
+		plt.plot(JsDict['PEr'][i])
+		plt.title('Error in the pressure')
+
+	plt.show()
+
+	return
+
 
 def plot_errs_res(TsP):
 
@@ -168,6 +207,7 @@ class ProbParams(object):
 		else:
 			self.mesh = smartminex_tayhoomesh.getmake_mesh(16)
 
+		self.N = N
 		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
 		self.Q = FunctionSpace(self.mesh, "CG", 1)
 		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
