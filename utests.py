@@ -32,29 +32,51 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		self.assertTrue(np.allclose(MatRa*vra, mat*v))
 
 	def test_rearrange_matrices(self):
-		from dolfin import project
+		"""check the algorithm rearranging for B2, solve the
+
+		rearranged system and sort back the solution vector 
+		The rearr. is done by swapping columns in the coeff matrix,
+		thus the resort is done by swapping the entries of the solution
+		vector"""
+
+		from dolfin import *
 		import test_time_schemes as tts
-		from time_int_schemes import col_columns_atend
 		import dolfin_to_nparrays as dtn
+		from time_int_schemes import col_columns_atend, revert_sort_tob2
 		import smartminex_tayhoomesh
 
-		N = 16 
-		PrP = tts.ProbParams(N)
+		N = 32 
+		mesh = smartminex_tayhoomesh.getmake_mesh(N)
 
-		Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
-		fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
+		V = VectorFunctionSpace(mesh, "CG", 2)
+		Q = FunctionSpace(mesh, "CG", 1)
 
-		Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
-				dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
+		velbcs = tts.setget_velbcs_zerosq(mesh, V)
 
-		B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
+		bcinds = []
+		for bc in velbcs:
+			bcdict = bc.get_boundary_values()
+			bcinds.extend(bcdict.keys())
+
+		# indices of the inner velocity nodes
+		invinds = np.setdiff1d(range(V.dim()),bcinds)
+
+		Ma, Aa, BTa, Ba = dtn.get_sysNSmats(V, Q)
+
+		Mc = Ma[invinds,:][:,invinds]
+		Ac = Aa[invinds,:][:,invinds]
+		Bc  = Ba[:,invinds]
+		BTc = BTa[invinds,:]
+
+		B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, V, mesh)
+		#B2BubInds = np.array([2,4])
 		# we need the B2Bub indices in the reduced setting vc
 		# this gives a masked array of boolean type
-		B2BubBool = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+		B2BubBool = np.in1d(np.arange(V.dim())[invinds], B2BubInds)
 		#B2BubInds = np.arange(len(B2BubIndsBool
 
 		Nv = len(invinds)
-		Np = PrP.Q.dim()
+		Np = Q.dim()
 		dt = 1.0/N
 
 		# the complement of the bubble index in the inner nodes
@@ -78,7 +100,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 			sps.csr_matrix((Np-1, (Np-1)))])
 		# The rearranged coefficient matrix
 		IterARa = sps.vstack([IterA1,IterA2])
-	
+
 		IterAqq = sps.hstack([Mc,-dt*BTc[:,1:]])
 		IterAp = sps.hstack([Bc[1:,:],sps.csr_matrix((Np-1,Np-1))])
 		# The actual coefficient matrix
@@ -89,13 +111,33 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		SolActu = sps.linalg.spsolve(IterA,rhs)
 		SolRa   = sps.linalg.spsolve(IterARa,rhs)
 
+		# Sort it back 
+		# manually 
 		SortBack = np.zeros((Nv+Np-1,1))
-		
-		SortBack[:Nv-(Np-1),0] = SolRa[BubIndC]
-		SortBack[Nv-(Np-1):Nv,0] = dt*SolRa[B2BI]
+		# q1
+		SortBack[BubIndC,0] = SolRa[:Nv-(Np-1)]
+		# tq2
+		SortBack[B2BI,0] = dt*SolRa[Nv-(Np-1):Nv]
 		SortBack[Nv:,0] = SolRa[Nv:]
 
+		SolRa = np.atleast_2d(SolRa).T
+
+		# and by function
+		SolRa[Nv-(Np-1):Nv,0] = dt*SolRa[Nv-(Np-1):Nv,0]
+		SB2 = revert_sort_tob2(SolRa[:Nv,],B2BI)
+		SB2 = np.vstack([SB2,SolRa[Nv:,]])
+		# SB2v = np.atleast_2d(SB2)
+
+		SolActu = np.atleast_2d(SolActu)
+		SortBack = np.atleast_2d(SortBack).T
+
+		#print SolActu
+		#print SolRa 
+		#print SortBack 
+		#print SB2
+
 		self.assertTrue(np.allclose(SolActu,SortBack,atol=1e-6))
+		self.assertTrue(np.allclose(SolActu,SB2.T,atol=1e-6))
 
 
 	def test_nse_solution(self):
