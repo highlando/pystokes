@@ -148,35 +148,40 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 		
 	return
 
-def halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
+def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
-	
-	taking advantage of the block diagonal structure
-	"""
 
-	N = PrP.N
+	iterative scheme: we first solve the symmetric subproblem
+	and use this solution as starting solution for gmres
+	"""
 
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
+
+	# Sort and flatten the B2BubBool
+	#B2BubBool = np.sort(B2BubBool, axis=None).astype(int)
 
 	# the complement of the bubble index in the inner nodes
 	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
 	# the bubbles as indices
 	B2BI = np.arange(len(B2BubBool))[B2BubBool]
 
-	# remove the p - freedom
-	# here the N+2 nd pressure dof is set zero
-	Bcc  = sps.vstack([Bc[:N+1,:],Bc[N+2:,:]])
-
 	# Reorder the matrices for smart min ext
 	MSme = col_columns_atend(Mc, B2BI)
-	BSme = col_columns_atend(Bcc, B2BI)
+	ASme = col_columns_atend(Ac, B2BI)
+	BSme = col_columns_atend(Bc, B2BI)
 
-	BfpSme = col_columns_atend(Bc, B2BI)
-	B1fpSme = BfpSme[:,:Nv-(Np-1)]
+	BTSme = BSme.T
 
-	B1Sme = BSme[:,:Nv-(Np-1)]
-	B2Sme = BSme[:,Nv-(Np-1):]
+	# here the first pressure dof is set zero
+	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
+	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
+
+	#print np.linalg.cond(B2Sme.todense())
+	
+#	raise Warning('debugggg')
+	#if pyamglina.condest(B2Sme,tol=1e-6,maxiter=1e5) > 1e5:
+		#raise Warning('Check B2 - it should be invertible - est. cond is > 1e5')
 
 	M1Sme = MSme[:,:Nv-(Np-1)]
 	M2Sme = MSme[:,Nv-(Np-1):]
@@ -188,78 +193,81 @@ def halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP
 	# 		B1    0     0     B2 	  p
 	# 								  q2
 	# cf. preprint
-	# Here we solve the splitted sys
-	#
-	# 		M   -dt*B'        q1
-	# 					*  1/dt*tq2  = rhs
-	# 		B    0       	   p
-	# 						  
 
-	# 		B1    B2 	 *    q1     = rhs
-	# 						  q2
-	#
+	IterA1 = sps.hstack([sps.hstack([M1Sme,dt*M2Sme]),
+		sps.hstack([-dt*BTc[:,1:],sps.csr_matrix((Nv,Np-1))])])
 
-	IterAqq = sps.hstack([Mc,-dt*Bc.T])
-	IterAp = sps.hstack([-dt*Bc,sps.csr_matrix((Np,Np))])
+	IterA2 = sps.hstack([sps.hstack([B1Sme,dt*B2Sme]),
+		sps.csr_matrix((Np-1, 2*(Np-1)))])
+	
+	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
+		B2Sme])
+
+	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
+
+	# symmetric subproblem
+	IterAqq = sps.hstack([Mc,-dt*Bc[:,1:].T])
+	IterAp = sps.hstack([-dt*Bc[1:,],sps.csr_matrix((Np-1,Np-1))])
 	# multiplied by -dt for symmetry
 
-	IterA  = sps.vstack([IterAqq,IterAp])
+	IterAMinR  = sps.vstack([IterAqq,IterAp])
 
-	#IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]), B2Sme])
-
+	
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	vp_old = np.copy(vp_init)
-	q1_old = vp_init[BubIndC,]
-	q2_old = vp_init[B2BubBool,]
-
-	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
-	qqp_old = np.zeros((Nv+Np,1))
-	qqp_old[:Nv-(Np-1),] = q1_old
-	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	vp_old = vp_init
+	v_old1 = vp_init[BubIndC,]
+	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+], cf. preprint
+	qqpq_old = np.zeros((Nv+2*(Np-1),1))
+	qqpq_old[:Nv-(Np-1),] = v_old1
+	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
-	#Mr = sps.diags(np.r_[np.ones(Nv-(Np-1)), 1./dt*np.ones(Np-1), np.ones(2*(Np-1))],0)
-	#Ml = sps.diags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0)
-	for etap in range(1,TsP.SampInt +1 ):
-		for i in range(Nts/TsP.SampInt):
+	Mr = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), dt*np.ones(Np-1), np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
+	Ml = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
+	for etap in range(1,11):
+		for i in range(Nts/8):
+
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
-			gdot = np.zeros((Np,1)) # TODO: implement \dot g
-
-			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1fpSme*q1_old]) \
-						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
+			Iterrhs = np.vstack([M1Sme*v_old1,
+				np.vstack([B1Sme*v_old1,fpbc[1:,]])]) \
+						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
+						np.zeros((2*(Np-1),1))])
 
 			if TsP.linatol == 0:
-				q1_tq2_p_new = spsla.spsolve(IterA,Iterrhs) 
-				qqp_old = np.atleast_2d(q1_tq2_p_new).T
+				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
+				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
 			else:
-				q1_tq2_p_new = krypy.linsys.minres(IterA, Iterrhs,
-						x0=qqp_old, tol=TsP.linatol) 
+				tic = time.clock()
 
-				qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
-				q1_old = qqp_old[BubIndC,]
+				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
+						x0=qqpq_old, Ml=Ml, Mr=None, tol=TsP.linatol, max_restarts=0, maxiter=500)#,restart=20)
+				# q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol,restart=20)
+				toc = time.clock()
+				print toc - tic
 
-				#ret = krypy.linsys.gmres(B2Sme, -B1Sme*q1_old + fpbc[1:,], x0=q2_old, maxiter=20, max_restarts=50)
-				#q2_old = ret['xk']
-
-				q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
-				q2_old = np.atleast_2d(q2_old).T
+				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 
 			# Extract the 'actual' velocity and pressure
-			qcSmaMin = np.vstack([q1_old, q2_old])
+			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
+								  qqpq_old[-(Np-1):,]])
 
-			vc = revert_sort_tob2(qcSmaMin,B2BI)
-
-			pc = qqp_old[Nv:Nv+Np,]
+			#raise Warning('debugggg')
+			vc = revert_sort_tob2(vcSmaMin,B2BI)
+			pc = qqpq_old[Nv:Nv+Np-1,]
 
 			vp_old = np.vstack([vc,pc])
-		
-			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = -1)
+
+
+			v_old1 = qqpq_old[:Nv-(Np-1),]
+			
+			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
 			
 			tcur += dt
 
@@ -268,11 +276,10 @@ def halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP
 		vCur.t = tcur
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
 
-		if TsP.ParaviewOutput:
-			TsP.UpFiles.u_file << v, tcur
-			TsP.UpFiles.p_file << p, tcur
+		TsP.UpFiles.u_file << v, tcur
+		TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
@@ -352,8 +359,8 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 
 	ContiRes, VelEr, PEr = [], [], []
 
-	Mr = sps.diags(np.r_[np.ones(Nv-(Np-1)), 1./dt*np.ones(Np-1), np.ones(2*(Np-1))],0)
-	Ml = sps.diags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0)
+	Mr = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), dt*np.ones(Np-1), np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
+	Ml = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
 	for etap in range(1,11):
 		for i in range(Nts/8):
 
@@ -372,7 +379,7 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 				tic = time.clock()
 
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
-						x0=qqpq_old, Ml=Ml, Mr=Mr, tol=TsP.linatol, max_restarts=100, maxiter=100)#,restart=20)
+						x0=qqpq_old, Ml=Ml, Mr=None, tol=TsP.linatol, max_restarts=0, maxiter=500)#,restart=20)
 				# q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol,restart=20)
 				toc = time.clock()
 				print toc - tic
