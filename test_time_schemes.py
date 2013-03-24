@@ -110,7 +110,7 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None):
 				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BubBool,PrP,TsP=TsP)
 			elif method == 4:
-				tis.halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,
+				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BubBool,PrP,TsP=TsP)
 
 		# Output only in first iteration!

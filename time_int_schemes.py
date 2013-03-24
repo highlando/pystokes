@@ -177,12 +177,6 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
 	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
 
-	#print np.linalg.cond(B2Sme.todense())
-	
-#	raise Warning('debugggg')
-	#if pyamglina.condest(B2Sme,tol=1e-6,maxiter=1e5) > 1e5:
-		#raise Warning('Check B2 - it should be invertible - est. cond is > 1e5')
-
 	M1Sme = MSme[:,:Nv-(Np-1)]
 	M2Sme = MSme[:,Nv-(Np-1):]
 	
@@ -206,28 +200,32 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
 
 	# symmetric subproblem
-	IterAqq = sps.hstack([Mc,-dt*Bc[:,1:].T])
-	IterAp = sps.hstack([-dt*Bc[1:,],sps.csr_matrix((Np-1,Np-1))])
+	IterAqq = sps.hstack([Mc,-dt*BTc[:,1:]])
+	IterAp = sps.hstack([-dt*Bc[1:,:],sps.csr_matrix((Np-1,Np-1))])
 	# multiplied by -dt for symmetry
 
 	IterAMinR  = sps.vstack([IterAqq,IterAp])
-
 	
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
 	vp_old = vp_init
-	v_old1 = vp_init[BubIndC,]
+	q1_old = vp_init[BubIndC,]
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+], cf. preprint
 	qqpq_old = np.zeros((Nv+2*(Np-1),1))
-	qqpq_old[:Nv-(Np-1),] = v_old1
+	qqpq_old[:Nv-(Np-1),] = q1_old
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
 	qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
 
+	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
+	qqp_old = np.zeros((Nv+Np-1,1))
+	qqp_old[:Nv-(Np-1),] = q1_old
+	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+
 	ContiRes, VelEr, PEr = [], [], []
 
-	Mr = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), dt*np.ones(Np-1), np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
+	Mr = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), 1/dt*np.ones(Np-1), np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
 	Ml = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
 	for etap in range(1,11):
 		for i in range(Nts/8):
@@ -235,20 +233,41 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
-			Iterrhs = np.vstack([M1Sme*v_old1,
-				np.vstack([B1Sme*v_old1,fpbc[1:,]])]) \
+			Iterrhs = np.vstack([M1Sme*q1_old,
+				np.vstack([B1Sme*q1_old,fpbc[1:,]])]) \
 						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						np.zeros((2*(Np-1),1))])
 
+			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
+
+			ItrhsMinR = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
+						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
+
 			if TsP.linatol == 0:
-				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
-				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
+				raise Warning('No direct solve for this method')
 			else:
 				tic = time.clock()
 
+				GetStartByMinres = False
+				## Solve the sym subprob
+				if GetStartByMinres: 
+					q1_tq2_p_new = krypy.linsys.minres(IterAMinR, ItrhsMinR,
+							x0=qqp_old, tol=TsP.linatol) 
+					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
+
+					q1_old  = qqp_old[BubIndC,]
+					tq2_old = 1/dt*qqp_old[B2BubBool,] #the dt was shifted into tq2
+					p_old   = qqp_old[Nv:,]
+
+					qqpq_old[:Nv-(Np-1),] = q1_old
+					qqpq_old[Nv:Nv+Np-1,] = p_old
+					qqpq_old[Nv-(Np-1):Nv,]= tq2_old
+
+
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
-						x0=qqpq_old, Ml=Ml, Mr=None, tol=TsP.linatol, max_restarts=0, maxiter=500)#,restart=20)
-				# q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol,restart=20)
+						x0=qqpq_old, Ml=Ml, Mr=Mr, 
+						tol=TsP.linatol, max_restarts=0, maxiter=500)
+
 				toc = time.clock()
 				print toc - tic
 
@@ -258,7 +277,6 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
 								  qqpq_old[-(Np-1):,]])
 
-			#raise Warning('debugggg')
 			vc = revert_sort_tob2(vcSmaMin,B2BI)
 			pc = qqpq_old[Nv:Nv+Np-1,]
 
