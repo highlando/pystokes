@@ -15,16 +15,16 @@ class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
 		self.tE = 3.0
-		self.Ntslist = [64, 128]#, 256, 512, 1024]#, 2048]
-		self.SampInt = self.Ntslist[0]/4
+		self.Ntslist = [256, 512]#, 1024]#, 2048]
+		self.SampInt = self.Ntslist[0]/16
 		self.method = method
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-5 #1e-8   # 0 for direct sparse solver
+		self.linatol = 0#1e-5 #1e-8   # 0 for direct sparse solver
 		self.ParaviewOutput = True
 		#self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
-def solve_stokesTimeDep(method=None, N=None, NtsList=None):
+def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -46,12 +46,12 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None):
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
 	PrP = ProbParams(N)
-
 	# instantiate the Time Int Parameters
 	TsP = TimestepParams(methdict[method], N)
-
 	if NtsList is not None:
 		TsP.Ntslist = NtsList
+	if LinaTol is not None:
+		TsP.linatol = LinaTol
 
 	print 'Mesh parameter N = %d' % N
 	print 'You have chosen %s for time integration' % methdict[method]
@@ -110,6 +110,9 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None):
 				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BubBool,PrP,TsP=TsP)
 			elif method == 4:
+				tis.halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,
+						vp_init,B2BubBool,PrP,TsP=TsP)
+			elif method == 5:  #no removal of the pressure freedom
 				tis.halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BubBool,PrP,TsP=TsP)
 
@@ -140,8 +143,13 @@ def save_simu(TsP, PrP):
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
 
-	f = open('json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json', 'w')
+	JsFile = 'json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
+
+	f = open(JsFile, 'w')
 	f.write(json.dumps(DictOfVals))
+
+	print 'Simulation data stored in "' + JsFile + '"'
+
 	return
 
 def load_json_dicts(StrToJs):
@@ -165,37 +173,40 @@ def merge_json_dicts(CurDi,DiToAppend):
 	Jsc['VelEr'].extend(Jsa['VelEr'])
 	Jsc['PEr'].extend(Jsa['PEr'])
 
-	f = open('json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json', 'w')
+	JsFile = 'json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json'
+
+	f = open(JsFile, 'w')
 	f.write(json.dumps(Jsc))
+
+	print '"Merged data stored in ' + JsFile + '"'
 
 	return Jsc
 
 
-
-def plot_errs_fromjsdict(JsDict):
+def jsd_plot_errs(JsDict):
 
 	JsDict = load_json_dicts(JsDict)
 
 	plt.close('all')
 	for i in range(len(JsDict['TimeDiscs'])):
-		fig1 = plt.figure(1)
-		plt.plot(JsDict['ContiRes'][i])
-		plt.title('Lina residual in the continuity eqn')
-		fig2 = plt.figure(2)
-		plt.plot(JsDict['VelEr'][i])
-		plt.title('Error in the velocity')
-		fig3 = plt.figure(3)
-		plt.plot(JsDict['PEr'][i])
-		plt.title('Error in the pressure')
+		leg = 'NTs = $%d$' % JsDict['TimeDiscs'][i]
+		plt.figure(1)
+		plt.plot(JsDict['ContiRes'][i],label=leg)
+		plt.title(JsDict['TimeIntMeth']+': continuity eqn residual')
+		plt.legend()
+		plt.figure(2)
+		plt.plot(JsDict['VelEr'][i],label=leg)
+		plt.title(JsDict['TimeIntMeth']+': Velocity error')
+		plt.legend()
+		plt.figure(3)
+		plt.plot(JsDict['PEr'][i],label=leg)
+		plt.title(JsDict['TimeIntMeth']+': Pressure error')
+		plt.legend()
 
 	plt.show()
 
 	return
 
-
-def save_simu(TsP,PrP):
-
-	return
 
 def plot_errs_res(TsP):
 
