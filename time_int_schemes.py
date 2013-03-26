@@ -1,12 +1,9 @@
 from dolfin import *
 import numpy as np
-import time
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 import krypy.linsys
-reload(krypy.linsys)
 from scipy.linalg import qr
-#import pyamglina
 
 import dolfin_to_nparrays as dtn
 
@@ -32,8 +29,10 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	B2BI = np.arange(len(B2BubBool))[B2BubBool]
 
 	# remove the p - freedom
+	Bcc  = Bc[1:,:]
+
 	# here the N+2 nd pressure dof is set zero
-	Bcc  = sps.vstack([Bc[:N+1,:],Bc[N+2:,:]])
+	#Bcc  = sps.vstack([Bc[:N+1,:],Bc[N+2:,:]])
 
 	# Reorder the matrices for smart min ext
 	MSme = col_columns_atend(Mc, B2BI)
@@ -104,15 +103,12 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 			else:
 				q1_tq2_p_new = krypy.linsys.minres(IterA, Iterrhs,
 						x0=qqp_old, tol=TsP.linatol) 
-
 				qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
-				q1_old = qqp_old[BubIndC,]
 
-				#ret = krypy.linsys.gmres(B2Sme, -B1Sme*q1_old + fpbc[1:,], x0=q2_old, maxiter=20, max_restarts=50)
-				#q2_old = ret['xk']
+			q1_old = qqp_old[BubIndC,]
 
-				q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
-				q2_old = np.atleast_2d(q2_old).T
+			q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
+			q2_old = np.atleast_2d(q2_old).T
 
 			# Extract the 'actual' velocity and pressure
 			qcSmaMin = np.vstack([q1_old, q2_old])
@@ -122,8 +118,8 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 			pc = qqp_old[Nv:Nv+Np-1,]
 
 			vp_old = np.vstack([vc,pc])
-		
-			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = N+1)
+
+			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
 			
 			tcur += dt
 
@@ -332,8 +328,9 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	BTSme = BSme.T
 
 	# here the first pressure dof is set zero
-	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
-	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
+	PDof = 0
+	B1Sme = BSme[PDof+1:,:][:,:Nv-(Np-1)]
+	B2Sme = BSme[PDof+1:,:][:,Nv-(Np-1):]
 
 	#print np.linalg.cond(B2Sme.todense())
 	
@@ -353,7 +350,7 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	# cf. preprint
 
 	IterA1 = sps.hstack([sps.hstack([M1Sme,dt*M2Sme]),
-		sps.hstack([-dt*BTc[:,1:],sps.csr_matrix((Nv,Np-1))])])
+		sps.hstack([-dt*BTc[:,PDof+1:],sps.csr_matrix((Nv,Np-1))])])
 
 	IterA2 = sps.hstack([sps.hstack([B1Sme,dt*B2Sme]),
 		sps.csr_matrix((Np-1, 2*(Np-1)))])
@@ -386,21 +383,17 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
 			Iterrhs = np.vstack([M1Sme*v_old1,
-				np.vstack([B1Sme*v_old1,fpbc[1:,]])]) \
-						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
+				np.vstack([B1Sme*v_old1,fpbc[PDof+1:,]])]) \
+						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
 						np.zeros((2*(Np-1),1))])
 
 			if TsP.linatol == 0:
 				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
 			else:
-				tic = time.clock()
-
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 						x0=qqpq_old, Ml=Ml, Mr=None, tol=TsP.linatol, max_restarts=0, maxiter=500)#,restart=20)
 				# q1_tq2_p_q2_new = spsla.gmres(IterA,Iterrhs,qqpq_old,tol=TsP.linatol,restart=20)
-				toc = time.clock()
-				print toc - tic
 
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 
@@ -414,22 +407,24 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 
 			vp_old = np.vstack([vc,pc])
 
-
 			v_old1 = qqpq_old[:Nv-(Np-1),]
 			
-			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
+			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = PDof)
 			
 			tcur += dt
+
+			print 'current time %f' % tcur
 
 		# the errors  
 		vCur, pCur = PrP.v, PrP.p 
 		vCur.t = tcur
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
 
-		TsP.UpFiles.u_file << v, tcur
-		TsP.UpFiles.p_file << p, tcur
+		if TsP.ParaviewOutput:
+			TsP.UpFiles.u_file << v, tcur
+			TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
