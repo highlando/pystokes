@@ -111,7 +111,6 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 						vp_init,B2BubBool,PrP,TsP=TsP)
 			elif method == 4:
 				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
-				tis.halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BubBool,PrP,TsP=TsP)
 			elif method == 5:  #no removal of the pressure freedom
 				tis.halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,
