@@ -57,6 +57,8 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 
 	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
 
+
+
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
@@ -70,6 +72,8 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	qqpq_old[:Nv-(Np-1),] = q1_old
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
 	qqpq_old[Nv+Np-1:,] = q2_old[Nv:,]
+
+	qqp_old = qqpq_old[:Nv+Np-1,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
@@ -87,7 +91,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 					q1_tq2_p_new = spsla.spsolve(IterA,Iterrhs) 
 					qqp_old = np.atleast_2d(q1_tq2_p_new).T
 				else:
-					q1_tq2_p_new = krypy.linsys.minres(IterA, Iterrhs,
+					q1_tq2_p_new = krypy.linsys.minres(IterASp, Iterrhs,
 							x0=qqp_old, tol=TsP.linatol) 
 					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
 

@@ -18,7 +18,7 @@ class TimestepParams(object):
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
 		self.SampInt = self.Ntslist[0]/16
 		self.method = method
-		self.Split = False
+		self.Split = True
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
 		self.linatol = 1e-5 #1e-8   # 0 for direct sparse solver
