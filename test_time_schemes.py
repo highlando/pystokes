@@ -98,23 +98,26 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 		elif method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
 		else:
-			# get the indices of the bubbles of B2
-			# the 1st pressure dof is the one that is removed
-			B2BubInds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
-			# we need the B2Bub indices in the reduced setting vc
+			# get the indices of the B2-part
+			B2Inds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
+			# the B2 inds wrt to inner nodes
 			# this gives a masked array of boolean type
-			B2BubBool = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
-			#B2BubInds = np.arange(len(B2BubIndsBool
+			B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+			# this as indices
+			B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
+			# Reorder the matrices for smart min ext
+			MSme = col_columns_atend(Mc, B2BI)
+			BSme = col_columns_atend(Bc, B2BI)
 
 			if method == 3:
 				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BubBool,PrP,TsP=TsP)
+						vp_init,B2BoolInv,PrP,TsP=TsP)
 			elif method == 4:
 				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BubBool,PrP,TsP=TsP)
+						vp_init,B2BoolInv,PrP,TsP=TsP)
 			elif method == 5:  #no removal of the pressure freedom
 				tis.halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BubBool,PrP,TsP=TsP)
+						vp_init,B2BoolInv,PrP,TsP=TsP)
 
 		# Output only in first iteration!
 		TsP.ParaviewOutput = False
@@ -277,6 +280,7 @@ class ProbParams(object):
 		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
 		self.Q = FunctionSpace(self.mesh, "CG", 1)
 		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
+		self.Pdof = 0  #dof removed in the p approximation
 		self.omega = 3
 		self.nu = 0
 		self.fp = Constant((0))

@@ -12,7 +12,7 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
-def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
+def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	
 	taking advantage of the block diagonal structure
@@ -24,9 +24,9 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 	tcur = t0
 
 	# the complement of the bubble index in the inner nodes
-	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
+	BubIndC = ~B2BoolInv #np.setdiff1d(np.arange(Nv),B2BoolInv)
 	# the bubbles as indices
-	B2BI = np.arange(len(B2BubBool))[B2BubBool]
+	B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
 
 	# remove the p - freedom
 	Bcc  = Bc[1:,:]
@@ -76,7 +76,7 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 
 	vp_old = np.copy(vp_init)
 	q1_old = vp_init[BubIndC,]
-	q2_old = vp_init[B2BubBool,]
+	q2_old = vp_init[B2BoolInv,]
 
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
 	qqp_old = np.zeros((Nv+Np-1,1))
@@ -144,7 +144,7 @@ def halfexp_euler_smarminex_split(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,T
 		
 	return
 
-def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
+def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 
 	iterative scheme: we first solve the symmetric subproblem
@@ -154,13 +154,13 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
 
-	# Sort and flatten the B2BubBool
-	#B2BubBool = np.sort(B2BubBool, axis=None).astype(int)
+	# Sort and flatten the B2BoolInv
+	#B2BoolInv = np.sort(B2BoolInv, axis=None).astype(int)
 
 	# the complement of the bubble index in the inner nodes
-	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
+	BubIndC = ~B2BoolInv #np.setdiff1d(np.arange(Nv),B2BoolInv)
 	# the bubbles as indices
-	B2BI = np.arange(len(B2BubBool))[B2BubBool]
+	B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
 
 	# Reorder the matrices for smart min ext
 	MSme = col_columns_atend(Mc, B2BI)
@@ -212,7 +212,7 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 	qqpq_old = np.zeros((Nv+2*(Np-1),1))
 	qqpq_old[:Nv-(Np-1),] = q1_old
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
-	qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
+	qqpq_old[Nv+Np-1:]    = vp_old[B2BoolInv,]
 
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
 	qqp_old = np.zeros((Nv+Np-1,1))
@@ -252,7 +252,7 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
 
 					q1_old  = qqp_old[BubIndC,]
-					tq2_old = 1/dt*qqp_old[B2BubBool,] #the dt was shifted into tq2
+					tq2_old = 1/dt*qqp_old[B2BoolInv,] #the dt was shifted into tq2
 					p_old   = qqp_old[Nv:,]
 
 					qqpq_old[:Nv-(Np-1),] = q1_old
@@ -305,20 +305,20 @@ def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool
 		
 	return
 
-def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
+def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
 
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
 
-	# Sort and flatten the B2BubBool
-	#B2BubBool = np.sort(B2BubBool, axis=None).astype(int)
+	# Sort and flatten the B2BoolInv
+	#B2BoolInv = np.sort(B2BoolInv, axis=None).astype(int)
 
 	# the complement of the bubble index in the inner nodes
-	BubIndC = ~B2BubBool #np.setdiff1d(np.arange(Nv),B2BubBool)
+	BubIndC = ~B2BoolInv #np.setdiff1d(np.arange(Nv),B2BoolInv)
 	# the bubbles as indices
-	B2BI = np.arange(len(B2BubBool))[B2BubBool]
+	B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
 
 	# Reorder the matrices for smart min ext
 	MSme = col_columns_atend(Mc, B2BI)
@@ -370,7 +370,7 @@ def halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BubBool,PrP,TsP):
 	qqpq_old = np.zeros((Nv+2*(Np-1),1))
 	qqpq_old[:Nv-(Np-1),] = v_old1
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
-	qqpq_old[Nv+Np-1:]    = vp_old[B2BubBool,]
+	qqpq_old[Nv+Np-1:]    = vp_old[B2BoolInv,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
