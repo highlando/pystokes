@@ -12,7 +12,7 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
-def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP):
+def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 1 formulation
 	
 	"""
@@ -23,7 +23,10 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	tcur = t0
 
 	# remove the p - freedom
-	BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof:,:]])
+	if Pdof == 0:
+		BSme  = BSme[1:,:]
+	else:
+		BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof+1:,:]])
 
 	B1Sme = BSme[:,:Nv-(Np-1)]
 	B2Sme = BSme[:,Nv-(Np-1):]
@@ -41,8 +44,9 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	# cf. preprint
 	#
 
+
 	IterA1 = sps.hstack([MSme,
-		sps.hstack([-dt*BSme,sps.csr_matrix((Nv,Np-1))])])
+		sps.hstack([-dt*BSme.T,sps.csr_matrix((Nv,Np-1))])])
 
 	# Multiply by -dt for symmetrie
 	IterA2 = sps.hstack([-dt*BSme,
@@ -58,7 +62,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	TsP.UpFiles.p_file << p, tcur
 
 	vp_old = np.copy(vp_init)
-	q1_old = vp_init[BubIndC,]
+	q1_old = vp_init[~B2BoolInv,]
 	q2_old = vp_init[B2BoolInv,]
 
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
@@ -71,12 +75,12 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 
 	for etap in range(1,TsP.SampInt +1 ):
 		for i in range(Nts/TsP.SampInt):
-			ConV, CurFv = get_conv_curfv_rearr(v,PrP,B2BoolInv)
+			ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
 			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
-						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
+						+ dt*np.vstack([FvbcSme+CurFv-ConV,gdot])
 
 			if TsP.Split:
 				if TsP.linatol == 0:
@@ -88,7 +92,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
 
 				q1_old = qqp_old[:Nv-(Np-1),]
-				q2_old = spsla.spsolve(B2Sme, -B1Sme*q1_old) 
+				q2_old = spsla.spsolve(B2Sme, FpbcSme - B1Sme*q1_old) 
 				q2_old = np.atleast_2d(q2_old).T
 
 				qSmaMin = np.vstack([q1_old, q2_old])
@@ -99,6 +103,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 				pc = qqp_old[Nv:,]
 
 			else:
+				Iterrhs = np.vstack([Iterrhs,FpbcSme[1:,]])
 				if TsP.linatol == 0:
 					q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
@@ -129,7 +134,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,fpbcSme,vp_init,B2BoolInv,PrP,TsP)
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
 
-		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
+		ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
 		PEr.append(errornorm(pCur,p))
 
@@ -660,12 +665,17 @@ def expand_vp_dolfunc(PrP, vp=None, vc=None, pc=None, pdof=None):
 
 	return v, p
 
-def get_conv_curfv_rearr(v,PrP,B2BoolInv):
+def get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv):
+
 		ConV  = dtn.get_convvec(v, PrP.V)
-		ConV = np.vstack([Conv[~B2BoolInv],Conv[~B2BoolInv]])
+		ConV = ConV[PrP.invinds,]
+
+		ConV = np.vstack([ConV[~B2BoolInv],ConV[B2BoolInv]])
 
 		CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
-		CurFv = np.vstack([CurFv[~B2BoolInv],CurFv[~B2BoolInv]])
+		if len(CurFv) != len(PrP.invinds):
+			raise Warning('Need fv at innernodes here')
+		CurFv = np.vstack([CurFv[~B2BoolInv],CurFv[B2BoolInv]])
 
 		return ConV, CurFv
 

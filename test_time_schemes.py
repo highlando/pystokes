@@ -21,7 +21,7 @@ class TimestepParams(object):
 		self.Split = False
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 0#1e-5 #1e-8   # 0 for direct sparse solver
+		self.linatol = 1e-5 #1e-8   # 0 for direct sparse solver
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = True
@@ -74,7 +74,7 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 		B2Inds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
 		# the B2 inds wrt to inner nodes
 		# this gives a masked array of boolean type
-		B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+		B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2Inds)
 		# this as indices
 		B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
 		# Reorder the matrices for smart min ext...
@@ -82,9 +82,9 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 		MSmeC = col_columns_atend(Mc, B2BI)
 		BSme = col_columns_atend(Bc, B2BI)
 		# ...and the lines
-		MSmeCL = col_columns_atend(MSme.T, B2BI)
+		MSmeCL = col_columns_atend(MSmeC.T, B2BI)
 
-		FvbcSme = np.vstack([fvbc[~B2BoolInv,],fvbc[B2BoolInv,])
+		FvbcSme = np.vstack([fvbc[~B2BoolInv,],fvbc[B2BoolInv,]])
 		FpbcSme = fpbc
 
 		PrP.Pdof = 0 # Thats how the smamin is constructed
@@ -120,8 +120,8 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
 		else:
 			if method == 3:
-				tis.halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,
-						vp_init,B2BoolInv,PrP,TsP):
+				tis.halfexp_euler_smarminex(MSmeCL,BSme,FvbcSme,FpbcSme,
+						vp_init,B2BoolInv,PrP,TsP)
 			elif method == 4:
 				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BoolInv,PrP,TsP=TsP)
