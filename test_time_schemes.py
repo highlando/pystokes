@@ -18,11 +18,13 @@ class TimestepParams(object):
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
 		self.SampInt = self.Ntslist[0]/16
 		self.method = method
+		self.Split = False
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
 		self.linatol = 0#1e-5 #1e-8   # 0 for direct sparse solver
+		self.Ml = None  #preconditioners
+		self.Mr = None
 		self.ParaviewOutput = True
-		#self.PickleFile = 'pickles/NTs%dto%dMesh%d' % (self.Ntslist[0], self.Ntslist[-1], N) + method
 
 def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 	"""system to solve
@@ -57,17 +59,36 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 	print 'You have chosen %s for time integration' % methdict[method]
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
-	#prepare for pickling the residuals
-	# fpic = file(TsP.PickleFile,'w')
-	# pickle.dump(TsP.Residuals, fpic)
-
 	# get system matrices as np.arrays
 	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
 	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
 
+	# condense the system by resolving the boundary values
 	Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
+	if method > 2:
+		from smamin_utils import col_columns_atend
+
+		# get the indices of the B2-part
+		B2Inds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
+		# the B2 inds wrt to inner nodes
+		# this gives a masked array of boolean type
+		B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
+		# this as indices
+		B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
+		# Reorder the matrices for smart min ext...
+		# ...the columns
+		MSmeC = col_columns_atend(Mc, B2BI)
+		BSme = col_columns_atend(Bc, B2BI)
+		# ...and the lines
+		MSmeCL = col_columns_atend(MSme.T, B2BI)
+
+		FvbcSme = np.vstack([fvbc[~B2BoolInv,],fvbc[B2BoolInv,])
+		FpbcSme = fpbc
+
+		PrP.Pdof = 0 # Thats how the smamin is constructed
+
 	### Output
 	if TsP.ParaviewOutput :
 		if not os.getcwd().split(os.sep)[-1] == 'pystokes':
@@ -78,7 +99,7 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 			os.remove( fname )
 
 		os.chdir('..')
-	
+
 	
 	###
 	# Time stepping
@@ -98,20 +119,9 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 		elif method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
 		else:
-			# get the indices of the B2-part
-			B2Inds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
-			# the B2 inds wrt to inner nodes
-			# this gives a masked array of boolean type
-			B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2BubInds)
-			# this as indices
-			B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
-			# Reorder the matrices for smart min ext
-			MSme = col_columns_atend(Mc, B2BI)
-			BSme = col_columns_atend(Bc, B2BI)
-
 			if method == 3:
-				tis.halfexp_euler_smarminex(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BoolInv,PrP,TsP=TsP)
+				tis.halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,
+						vp_init,B2BoolInv,PrP,TsP):
 			elif method == 4:
 				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
 						vp_init,B2BoolInv,PrP,TsP=TsP)
