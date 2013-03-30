@@ -26,7 +26,7 @@ class TimestepParams(object):
 		self.Mr = None
 		self.ParaviewOutput = True
 
-def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
+def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -43,8 +43,7 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 	methdict = {0:'ImpEulFull', 
 			1:'ImpEulQr', 
 			2:'HalfExpEulInd2',
-			3:'HalfExpEulSmaMin',
-			4:'HalfExpEulSmaMinSplit'}
+			3:'HalfExpEulSmaMin'}
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
 	PrP = ProbParams(N)
@@ -54,6 +53,8 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 		TsP.Ntslist = NtsList
 	if LinaTol is not None:
 		TsP.linatol = LinaTol
+	if Split is not None:
+		TsP.Split = Split
 
 	print 'Mesh parameter N = %d' % N
 	print 'You have chosen %s for time integration' % methdict[method]
@@ -122,12 +123,6 @@ def solve_stokesTimeDep(method=None, N=None, NtsList=None, LinaTol=None):
 			if method == 3:
 				tis.halfexp_euler_smarminex(MSmeCL,BSme,FvbcSme,FpbcSme,
 						vp_init,B2BoolInv,PrP,TsP)
-			elif method == 4:
-				tis.halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BoolInv,PrP,TsP=TsP)
-			elif method == 5:  #no removal of the pressure freedom
-				tis.halfexp_euler_smarminex_fpsplit(Mc,Ac,BTc,Bc,fvbc,fpbc,
-						vp_init,B2BoolInv,PrP,TsP=TsP)
 
 		# Output only in first iteration!
 		TsP.ParaviewOutput = False

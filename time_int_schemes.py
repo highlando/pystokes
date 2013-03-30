@@ -25,6 +25,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	# remove the p - freedom
 	if Pdof == 0:
 		BSme  = BSme[1:,:]
+		FpbcSme = FpbcSme[1:,]
 	else:
 		BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof+1:,:]])
 
@@ -45,19 +46,19 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	#
 
 
-	IterA1 = sps.hstack([MSme,
-		sps.hstack([-dt*BSme.T,sps.csr_matrix((Nv,Np-1))])])
+	IterA1 = sps.hstack([MSme,-dt*BSme.T])
 
-	# Multiply by -dt for symmetrie
-	IterA2 = sps.hstack([-dt*BSme,
-		sps.csr_matrix((Np-1, 2*(Np-1)))])
+	# Multiply by -dt for symmetry
+	IterA2 = sps.hstack([-dt*BSme, sps.csr_matrix((Np-1, Np-1))])
+
+	IterASp = sps.vstack([IterA1,IterA2])
 	
 	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
 		B2Sme])
 
-	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
-
-
+	IterA = sps.vstack([
+		sps.hstack([IterASp, sps.csr_matrix((Nv+Np-1,Np-1))]),
+				IterA3])
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -88,7 +89,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 
 			if TsP.Split:
 				if TsP.linatol == 0:
-					q1_tq2_p_new = spsla.spsolve(IterA,Iterrhs) 
+					q1_tq2_p_new = spsla.spsolve(IterASp,Iterrhs) 
 					qqp_old = np.atleast_2d(q1_tq2_p_new).T
 				else:
 					q1_tq2_p_new = krypy.linsys.minres(IterASp, Iterrhs,
@@ -107,7 +108,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 				pc = qqp_old[Nv:,]
 
 			else:
-				Iterrhs = np.vstack([Iterrhs,FpbcSme[1:,]])
+				Iterrhs = np.vstack([Iterrhs,FpbcSme])
 				if TsP.linatol == 0:
 					q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
