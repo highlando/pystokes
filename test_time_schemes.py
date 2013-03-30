@@ -151,7 +151,7 @@ def save_simu(TsP, PrP):
 			'TimeDiscs': TsP.Ntslist,
 			'LinaTol': TsP.linatol,
 			'TimeIntMeth': TsP.method,
-			'Split': TsP.Split
+			'Split': TsP.Split,
 			'ContiRes': TsP.Residuals.ContiRes,
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
