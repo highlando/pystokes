@@ -27,7 +27,7 @@ class TimestepParams(object):
 		self.Mr = None
 		self.ParaviewOutput = True
 
-def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=None):
+def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -56,6 +56,8 @@ def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=N
 		TsP.linatol = LinaTol
 	if Split is not None:
 		TsP.Split = Split
+	if MaxIter is not None:
+		TsP.MaxIter = MaxIter
 
 	print 'Mesh parameter N = %d' % N
 	print 'You have chosen %s for time integration' % methdict[method]
@@ -149,6 +151,7 @@ def save_simu(TsP, PrP):
 			'TimeDiscs': TsP.Ntslist,
 			'LinaTol': TsP.linatol,
 			'TimeIntMeth': TsP.method,
+			'Split': TsP.Split
 			'ContiRes': TsP.Residuals.ContiRes,
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
