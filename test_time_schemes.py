@@ -18,10 +18,11 @@ class TimestepParams(object):
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
 		self.SampInt = self.Ntslist[0]/16
 		self.method = method
-		self.Split = True
+		self.Split = None  #Can be 'Full' and 'Semi'
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-5 #1e-8   # 0 for direct sparse solver
+		self.linatol = 1e-4 #1e-8   # 0 for direct sparse solver
+		self.MaxIter = 200
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = True
@@ -121,10 +122,9 @@ def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=N
 			tis.qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
 		elif method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
-		else:
-			if method == 3:
-				tis.halfexp_euler_smarminex(MSmeCL,BSme,FvbcSme,FpbcSme,
-						vp_init,B2BoolInv,PrP,TsP)
+		elif method == 3:
+			tis.halfexp_euler_smarminex(MSmeCL,BSme,FvbcSme,FpbcSme,
+					vp_init,B2BoolInv,PrP,TsP)
 
 		# Output only in first iteration!
 		TsP.ParaviewOutput = False

@@ -25,7 +25,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	# remove the p - freedom
 	if Pdof == 0:
 		BSme  = BSme[1:,:]
-		FpbcSme = FpbcSme[1:,]
+		FpbcSmeC = FpbcSme[1:,]
 	else:
 		BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof+1:,:]])
 
@@ -69,10 +69,10 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	q2_old = vp_init[B2BoolInv,]
 
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
-	qqpq_old = np.zeros((Nv+Np-1,1))
+	qqpq_old = np.zeros((Nv+2*(Np-1),1))
 	qqpq_old[:Nv-(Np-1),] = q1_old
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
-	qqpq_old[Nv+Np-1:,] = q2_old[Nv:,]
+	qqpq_old[Nv+Np-1:,] = q2_old
 
 	qqp_old = qqpq_old[:Nv+Np-1,]
 
@@ -87,36 +87,40 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
 						+ dt*np.vstack([FvbcSme+CurFv-ConV,gdot])
 
-			if TsP.Split:
+			if TsP.Split == 'Full' or TsP.Split == 'Semi':
 				if TsP.linatol == 0:
 					q1_tq2_p_new = spsla.spsolve(IterASp,Iterrhs) 
 					qqp_old = np.atleast_2d(q1_tq2_p_new).T
 				else:
 					q1_tq2_p_new = krypy.linsys.minres(IterASp, Iterrhs,
-							x0=qqp_old, tol=TsP.linatol) 
+							x0=qqp_old, maxiter=TsP.MaxIter, tol=TsP.linatol) 
 					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
 
-				q1_old = qqp_old[:Nv-(Np-1),]
-				q2_old = spsla.spsolve(B2Sme, FpbcSme - B1Sme*q1_old) 
-				q2_old = np.atleast_2d(q2_old).T
+				if TsP.Split == 'Semi':
+					qqpq_old[:Nv+Np-1,] = qqp_old
+				else:
+					q1_old = qqp_old[:Nv-(Np-1),]
+					q2_old = spsla.spsolve(B2Sme, FpbcSmeC - B1Sme*q1_old) 
+					q2_old = np.atleast_2d(q2_old).T
+					qSmaMin = np.vstack([q1_old, q2_old])
+					# Extract the 'actual' velocity and pressure
+					vc = np.zeros((Nv,1))
+					vc[~B2BoolInv,] = q1_old 
+					vc[B2BoolInv,] = q2_old 
+					pc = qqp_old[Nv:,]
 
-				qSmaMin = np.vstack([q1_old, q2_old])
-				# Extract the 'actual' velocity and pressure
-				vc = np.zeros((Nv,1))
-				vc[~B2BoolInv,] = q1_old 
-				vc[B2BoolInv,] = q2_old 
-				pc = qqp_old[Nv:,]
-
-			else:
-				Iterrhs = np.vstack([Iterrhs,FpbcSme])
+			if TsP.Split != 'Full':
+				Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 				if TsP.linatol == 0:
 					q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
 				else:
 					q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 							x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
-							tol=TsP.linatol, max_restarts=0, maxiter=500)
+							tol=TsP.linatol, maxiter=TsP.MaxIter)
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
+
+				q1_old = qqpq_old[:Nv-(Np-1),]
 
 				# Extract the 'actual' velocity and pressure
 				vc = np.zeros((Nv,1))
