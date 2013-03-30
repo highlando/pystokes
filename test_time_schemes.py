@@ -58,6 +58,8 @@ def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=N
 
 	print 'Mesh parameter N = %d' % N
 	print 'You have chosen %s for time integration' % methdict[method]
+	if Split:
+		print 'The system is split'
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
 	# get system matrices as np.arrays
