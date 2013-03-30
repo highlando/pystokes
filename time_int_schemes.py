@@ -60,6 +60,18 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		sps.hstack([IterASp, sps.csr_matrix((Nv+Np-1,Np-1))]),
 				IterA3])
 
+	## Preconditioning ...
+	#
+	if TsP.Split is None:
+		def PrecByB2(qqpq):
+			q2 = qqpq[-(Np-1):,]
+			q2i = spsla.spsolve(B2Sme,q2)
+			q2i = np.atleast_2d(q2i).T
+			return np.vstack([qqpq[:-(Np-1),],q2i])
+		
+		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2 )
+		TsP.Ml = MGmr
+
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
@@ -108,6 +120,8 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 					vc[~B2BoolInv,] = q1_old 
 					vc[B2BoolInv,] = q2_old 
 					pc = qqp_old[Nv:,]
+
+
 
 			if TsP.Split != 'Full':
 				Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
