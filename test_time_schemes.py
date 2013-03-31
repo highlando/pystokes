@@ -131,8 +131,8 @@ def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=N
 		# Output only in first iteration!
 		TsP.ParaviewOutput = False
 	
-	plot_errs_res(TsP)
 	save_simu(TsP, PrP)
+	#plot_errs_res(TsP)
 		
 	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
 	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
