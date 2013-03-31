@@ -5,12 +5,9 @@ import matplotlib.pyplot as plt
 import os, glob
 
 import dolfin_to_nparrays as dtn
-reload(dtn)
 import time_int_schemes as tis
-reload(tis)
-		
 import smartminex_tayhoomesh 
-reload(smartminex_tayhoomesh)
+
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
