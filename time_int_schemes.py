@@ -74,7 +74,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 			p  = spsla.spsolve(B2Sme.T, p)
 			p  = MLumpI2*np.atleast_2d(p).T
 			p  = spsla.spsolve(B2Sme,p)
-			p  = np.atleast_2d(p).T
+			p  = -np.atleast_2d(p).T
 
 			q2 = qqpq[-(Np-1):,]
 			q2 = spsla.spsolve(B2Sme,q2)
@@ -92,10 +92,16 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	vp_old = np.copy(vp_init)
 	q1_old = vp_init[~B2BoolInv,]
 	q2_old = vp_init[B2BoolInv,]
+	# initial value for tq2
+	ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
+	tq2_old = spsla.spsolve(M2Sme[-(Np-1):,:], CurFv[-(Np-1):,])
+	#tq2_old = MLumpI2*CurFv[-(Np-1):,]
+	tq2_old = np.atleast_2d(tq2_old).T
 
 	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
 	qqpq_old = np.zeros((Nv+2*(Np-1),1))
 	qqpq_old[:Nv-(Np-1),] = q1_old
+	qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
 	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
 	qqpq_old[Nv+Np-1:,] = q2_old
 
