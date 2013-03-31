@@ -16,13 +16,13 @@ class TimestepParams(object):
 		self.t0 = 0
 		self.tE = 3.0
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
-		self.SampInt = self.Ntslist[0]/32
+		self.NOutPutPts = 32
 		self.method = method
 		self.Split = None  #Can be 'Full' and 'Semi'
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
 		self.linatol = 1e-4 #1e-8   # 0 for direct sparse solver
-		self.MaxIter = 200
+		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = True
@@ -82,7 +82,7 @@ def solve_stokesTimeDep(method=None, Split=None, N=None, NtsList=None, LinaTol=N
 		# this gives a masked array of boolean type
 		B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2Inds)
 		# this as indices
-		B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
+		B2BI = np.arange(len(B2BoolInv), dtype=np.int32)[B2BoolInv]
 		# Reorder the matrices for smart min ext...
 		# ...the columns
 		MSmeC = col_columns_atend(Mc, B2BI)

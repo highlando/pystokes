@@ -117,7 +117,7 @@ def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
 	fpbc = - Ba*auxu
 	
 	# indices of the innernodes
-	innerinds = np.setdiff1d(range(len(fv)),bcinds)
+	innerinds = np.setdiff1d(range(len(fv)),bcinds).astype(np.int32)
 
 	# extract the inner nodes equation coefficients
 	Mc = Ma[innerinds,:][:,innerinds]

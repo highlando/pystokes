@@ -63,13 +63,20 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	## Preconditioning ...
 	#
 	if TsP.Split is None:
+		MLum = np.atleast_2d(MSme.diagonal()).T
+		MLum1 = MLum[:-(Np-1),]
+		MLum2 = MLum[-(Np-1):,]
 		def PrecByB2(qqpq):
+			qq = qqpq[:Nv,] 
+			p  = qqpq[Nv:-(Np-1),]
+			
+
 			q2 = qqpq[-(Np-1):,]
-			q2i = spsla.spsolve(B2Sme,q2)
-			q2i = np.atleast_2d(q2i).T
-			return np.vstack([qqpq[:-(Np-1),],q2i])
+			q2 = spsla.spsolve(B2Sme,q2)
+			q2 = np.atleast_2d(q2).T
+			return np.vstack([qqp,q2])
 		
-		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2 )
+		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2)#, dtype=np.float32 )
 		TsP.Ml = MGmr
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
@@ -90,8 +97,8 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 
 	ContiRes, VelEr, PEr = [], [], []
 
-	for etap in range(1,TsP.SampInt +1 ):
-		for i in range(Nts/TsP.SampInt):
+	for etap in range(1,TsP.NOutPutPts +1 ):
+		for i in range(Nts/TsP.NOutPutPts):
 			ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
@@ -151,175 +158,13 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		vCur.t = tcur
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
 		if TsP.ParaviewOutput:
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
 
 		ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
-		VelEr.append(errornorm(vCur,v))
-		PEr.append(errornorm(pCur,p))
-
-	TsP.Residuals.ContiRes.append(ContiRes)
-	TsP.Residuals.VelEr.append(VelEr)
-	TsP.Residuals.PEr.append(PEr)
-		
-	return
-
-
-def halfexp_euler_smarminex_wminresprec(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,B2BoolInv,PrP,TsP):
-	"""halfexplicit euler for the NSE in index 2 formulation
-
-	iterative scheme: we first solve the symmetric subproblem
-	and use this solution as starting solution for gmres
-	"""
-
-	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
-	tcur = t0
-
-	# Sort and flatten the B2BoolInv
-	#B2BoolInv = np.sort(B2BoolInv, axis=None).astype(int)
-
-	# the complement of the bubble index in the inner nodes
-	BubIndC = ~B2BoolInv #np.setdiff1d(np.arange(Nv),B2BoolInv)
-	# the bubbles as indices
-	B2BI = np.arange(len(B2BoolInv))[B2BoolInv]
-
-	# Reorder the matrices for smart min ext
-	MSme = col_columns_atend(Mc, B2BI)
-	ASme = col_columns_atend(Ac, B2BI)
-	BSme = col_columns_atend(Bc, B2BI)
-
-	BTSme = BSme.T
-
-	# here the first pressure dof is set zero
-	B1Sme = BSme[1:,:][:,:Nv-(Np-1)]
-	B2Sme = BSme[1:,:][:,Nv-(Np-1):]
-
-	M1Sme = MSme[:,:Nv-(Np-1)]
-	M2Sme = MSme[:,Nv-(Np-1):]
-	
-	#### The matrix to be solved in every time step
-	#
-	# 		M1  dt*M2  -dt*B'  0      q1
-	# 		B1  dt*B2   0      0   *  tq2  = rhs
-	# 		B1    0     0     B2 	  p
-	# 								  q2
-	# cf. preprint
-
-	IterA1 = sps.hstack([sps.hstack([M1Sme,dt*M2Sme]),
-		sps.hstack([-dt*BTc[:,1:],sps.csr_matrix((Nv,Np-1))])])
-
-	IterA2 = sps.hstack([sps.hstack([B1Sme,dt*B2Sme]),
-		sps.csr_matrix((Np-1, 2*(Np-1)))])
-	
-	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
-		B2Sme])
-
-	IterA = sps.vstack([sps.vstack([IterA1,IterA2]),IterA3])
-
-	# symmetric subproblem
-	IterAqq = sps.hstack([Mc,-dt*BTc[:,1:]])
-	IterAp = sps.hstack([-dt*Bc[1:,:],sps.csr_matrix((Np-1,Np-1))])
-	# multiplied by -dt for symmetry
-
-	IterAMinR  = sps.vstack([IterAqq,IterAp])
-	
-	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
-	TsP.UpFiles.u_file << v, tcur
-	TsP.UpFiles.p_file << p, tcur
-
-	vp_old = vp_init
-	q1_old = vp_init[BubIndC,]
-	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+], cf. preprint
-	qqpq_old = np.zeros((Nv+2*(Np-1),1))
-	qqpq_old[:Nv-(Np-1),] = q1_old
-	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
-	qqpq_old[Nv+Np-1:]    = vp_old[B2BoolInv,]
-
-	# state vector of the smaminex system : [ q1^+, tq2^c, p^c] with [q2^+] decoupled
-	qqp_old = np.zeros((Nv+Np-1,1))
-	qqp_old[:Nv-(Np-1),] = q1_old
-	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
-
-	ContiRes, VelEr, PEr = [], [], []
-
-	Mr = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), 1/dt*np.ones(Np-1), np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
-	Ml = sps.spdiags(np.r_[np.ones(Nv-(Np-1)), np.ones(Np-1), dt*np.ones(2*(Np-1))],0,Nv+2*(Np-1),Nv+2*(Np-1))
-	for etap in range(1,11):
-		for i in range(Nts/8):
-
-			ConV  = dtn.get_convvec(v, PrP.V)
-			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
-
-			Iterrhs = np.vstack([M1Sme*q1_old,
-				np.vstack([B1Sme*q1_old,fpbc[1:,]])]) \
-						+ dt*np.vstack([fvbc+CurFv-Ac*vp_old[:Nv,]-ConV[PrP.invinds,],
-						np.zeros((2*(Np-1),1))])
-
-			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
-
-			ItrhsMinR = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
-						+ dt*np.vstack([fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,],gdot])
-
-			if TsP.linatol == 0:
-				raise Warning('No direct solve for this method')
-			else:
-				tic = time.clock()
-
-				GetStartByMinres = False
-				## Solve the sym subprob
-				if GetStartByMinres: 
-					q1_tq2_p_new = krypy.linsys.minres(IterAMinR, ItrhsMinR,
-							x0=qqp_old, tol=TsP.linatol) 
-					qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
-
-					q1_old  = qqp_old[BubIndC,]
-					tq2_old = 1/dt*qqp_old[B2BoolInv,] #the dt was shifted into tq2
-					p_old   = qqp_old[Nv:,]
-
-					qqpq_old[:Nv-(Np-1),] = q1_old
-					qqpq_old[Nv:Nv+Np-1,] = p_old
-					qqpq_old[Nv-(Np-1):Nv,]= tq2_old
-
-
-				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
-						x0=qqpq_old, Ml=Ml, Mr=Mr, 
-						tol=TsP.linatol, max_restarts=0, maxiter=500)
-
-				toc = time.clock()
-				print toc - tic
-
-				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
-
-			# Extract the 'actual' velocity and pressure
-			vcSmaMin = np.vstack([qqpq_old[:Nv-(Np-1),],
-								  qqpq_old[-(Np-1):,]])
-
-			vc = revert_sort_tob2(vcSmaMin,B2BI)
-			pc = qqpq_old[Nv:Nv+Np-1,]
-
-			vp_old = np.vstack([vc,pc])
-
-
-			v_old1 = qqpq_old[:Nv-(Np-1),]
-			
-			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = 0)
-			
-			tcur += dt
-
-		# the errors  
-		vCur, pCur = PrP.v, PrP.p 
-		vCur.t = tcur
-		pCur.t = tcur - dt
-
-		print '%d of %d time steps completed ' % (etap*Nts/10,Nts) 
-
-		TsP.UpFiles.u_file << v, tcur
-		TsP.UpFiles.p_file << p, tcur
-
-		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 		VelEr.append(errornorm(vCur,v))
 		PEr.append(errornorm(pCur,p))
 
@@ -348,8 +193,8 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
-	for etap in range(1,TsP.SampInt + 1 ):
-		for i in range(Nts/TsP.SampInt):
+	for etap in range(1,TsP.NOutPutPts + 1 ):
+		for i in range(Nts/TsP.NOutPutPts):
 
 			#vp_old[Nv:,0] = 0 
 
@@ -383,7 +228,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 		vCur.t = tcur 
 		pCur.t = tcur - dt
 
-		print '%d of %d time steps completed ' % (etap*Nts/TsP.SampInt, Nts) 
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
 		if TsP.ParaviewOutput:
 			TsP.UpFiles.u_file << v, tcur
