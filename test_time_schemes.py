@@ -16,7 +16,7 @@ class TimestepParams(object):
 		self.t0 = 0
 		self.tE = 3.0
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
-		self.SampInt = self.Ntslist[0]/16
+		self.SampInt = self.Ntslist[0]/32
 		self.method = method
 		self.Split = None  #Can be 'Full' and 'Semi'
 		self.UpFiles = UpFiles(method)
