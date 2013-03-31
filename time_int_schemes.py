@@ -62,19 +62,25 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 
 	## Preconditioning ...
 	#
-	if TsP.Split is None:
-		MLum = np.atleast_2d(MSme.diagonal()).T
-		MLum1 = MLum[:-(Np-1),]
-		MLum2 = MLum[-(Np-1):,]
+	if TsP.Split is None and TsP.SadPtPrec:
+		MLump = np.atleast_2d(MSme.diagonal()).T
+		MLumpI = 1./MLump
+		MLumpI1 = MLumpI[:-(Np-1),]
+		MLumpI2 = MLumpI[-(Np-1):,]
 		def PrecByB2(qqpq):
-			qq = qqpq[:Nv,] 
+			qq = MLumpI*qqpq[:Nv,] 
+
 			p  = qqpq[Nv:-(Np-1),]
-			
+			p  = spsla.spsolve(B2Sme.T, p)
+			p  = MLumpI2*np.atleast_2d(p).T
+			p  = spsla.spsolve(B2Sme,p)
+			p  = np.atleast_2d(p).T
 
 			q2 = qqpq[-(Np-1):,]
 			q2 = spsla.spsolve(B2Sme,q2)
 			q2 = np.atleast_2d(q2).T
-			return np.vstack([qqp,q2])
+
+			return np.vstack([np.vstack([qq, p]), q2])
 		
 		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2)#, dtype=np.float32 )
 		TsP.Ml = MGmr
