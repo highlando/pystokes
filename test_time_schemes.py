@@ -66,7 +66,7 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
 	# get system matrices as np.arrays
-	Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
+	Ma, Aa, BTa, Ba, MPa = dtn.get_sysNSmats(PrP.V, PrP.Q)
 	fv, fp = dtn.setget_rhs(PrP.V, PrP.Q, PrP.fv, PrP.fp)
 
 	# condense the system by resolving the boundary values
@@ -76,24 +76,13 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 	if method > 2:
 		from smamin_utils import col_columns_atend
 
-		# get the indices of the B2-part
-		B2Inds = smartminex_tayhoomesh.get_B2_bubbleinds(N, PrP.V, PrP.mesh)
-		# the B2 inds wrt to inner nodes
-		# this gives a masked array of boolean type
-		B2BoolInv = np.in1d(np.arange(PrP.V.dim())[PrP.invinds], B2Inds)
-		# this as indices
-		B2BI = np.arange(len(B2BoolInv), dtype=np.int32)[B2BoolInv]
-		# Reorder the matrices for smart min ext...
-		# ...the columns
-		MSmeC = col_columns_atend(Mc, B2BI)
-		BSme = col_columns_atend(Bc, B2BI)
-		# ...and the lines
-		MSmeCL = col_columns_atend(MSmeC.T, B2BI)
+		MSmeCL, BSme, B2Inds, B2BoolInv, B2BI = smartminex_tayhoomesh.get_smamin_rearrangement(N,PrP,Mc,Bc)
 
 		FvbcSme = np.vstack([fvbc[~B2BoolInv,],fvbc[B2BoolInv,]])
 		FpbcSme = fpbc
 
 		PrP.Pdof = 0 # Thats how the smamin is constructed
+	
 
 	### Output
 	if TsP.ParaviewOutput :
@@ -125,7 +114,7 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 		elif method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
 		elif method == 3:
-			tis.halfexp_euler_smarminex(MSmeCL,BSme,FvbcSme,FpbcSme,
+			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
 					vp_init,B2BoolInv,PrP,TsP)
 
 		# Output only in first iteration!
@@ -161,7 +150,7 @@ def save_simu(TsP, PrP):
 	f = open(JsFile, 'w')
 	f.write(json.dumps(DictOfVals))
 
-	print 'Simulation data stored in "' + JsFile + '"'
+	print 'For the error plot, run \ntts.jsd_plot_errs("' + JsFile + '")'
 
 	return
 

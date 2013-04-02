@@ -23,6 +23,7 @@ def get_sysNSmats( V, Q): # , velbcs ):
 	q = TestFunction(Q)
 
 	ma = inner(u,v)*dx
+	mp = inner(p,q)*dx
 	aa = inner(grad(u), grad(v))*dx 
 	grada = div(v)*p*dx
 	diva = q*div(u)*dx
@@ -32,10 +33,14 @@ def get_sysNSmats( V, Q): # , velbcs ):
 	A = assemble(aa)
 	Grad = assemble(grada)
 	Div = assemble(diva)
+	MP = assemble(mp)
 
 	# Convert DOLFIN representation to numpy arrays
 	rows, cols, values = M.data()
 	Ma = sps.csr_matrix((values, cols, rows))
+
+	rows, cols, values = MP.data()
+	MPa = sps.csr_matrix((values, cols, rows))
 
 	rows, cols, values = A.data()
 	Aa = sps.csr_matrix((values, cols, rows))
@@ -46,7 +51,7 @@ def get_sysNSmats( V, Q): # , velbcs ):
 	rows, cols, values = Div.data()
 	Ba = sps.csr_matrix((values, cols, rows))
 
-	return Ma, Aa, BTa, Ba
+	return Ma, Aa, BTa, Ba, MPa
 	
 
 def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):

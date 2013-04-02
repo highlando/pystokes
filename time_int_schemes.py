@@ -12,7 +12,7 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
-def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
+def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 1 formulation
 	
 	"""
@@ -22,12 +22,16 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 	tcur = t0
 
+	Npc = Np-1
+
 	# remove the p - freedom
 	if Pdof == 0:
 		BSme  = BSme[1:,:]
 		FpbcSmeC = FpbcSme[1:,]
+		MPc = MP[1:,:][:,1:]
 	else:
 		BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof+1:,:]])
+		raise Warning('TODO: Implement this')
 
 	B1Sme = BSme[:,:Nv-(Np-1)]
 	B2Sme = BSme[:,Nv-(Np-1):]
@@ -60,10 +64,27 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		sps.hstack([IterASp, sps.csr_matrix((Nv+Np-1,Np-1))]),
 				IterA3])
 
+	Mqqpq = None #sps.block_diag((MSme,MPc,MPc))
+
+	### Inner product for Smart Min
+	#IP1 = sps.hstack([M1Sme[:-Npc,:],
+	#	sps.hstack([sps.csr_matrix((Nv-Npc,2*Npc)), M2Sme[:-Npc,:]]) ])
+	#IP2 = sps.csr_matrix((Npc, Nv + 2*Npc))
+	#IP3 = sps.hstack([sps.csr_matrix((Npc,Nv)),
+	#	sps.hstack([MPc, sps.csr_matrix((Npc,Npc))]) ])
+	#IP4 = sps.hstack([M1Sme[-Npc:,:],
+	#	sps.hstack([sps.csr_matrix((Npc,2*Npc)), M2Sme[-Npc:,:]]) ])
+	#
+	#IP = sps.vstack([ sps.vstack([IP1, IP2 ]),
+	#			sps.vstack([IP3, IP4 ]) ])
+
+
+
 	## Preconditioning ...
 	#
 	if TsP.Split is None and TsP.SadPtPrec:
 		MLump = np.atleast_2d(MSme.diagonal()).T
+		MLump2 =  MLump[-(Np-1):,]
 		MLumpI = 1./MLump
 		MLumpI1 = MLumpI[:-(Np-1),]
 		MLumpI2 = MLumpI[-(Np-1):,]
@@ -84,6 +105,27 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		
 		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2)#, dtype=np.float32 )
 		TsP.Ml = MGmr
+	
+	def smamin_ip(qqpq1, qqpq2):
+		"""good ip for the prec. smamin sys???
+		
+		note that it is indefinite...
+		"""
+		def _inv_prec(qqpq):
+			qq = MLump*qqpq[:Nv,] 
+			p  = qqpq[Nv:-(Np-1),]
+			p  = B2Sme.T*p
+			p  = MLump2*p
+			p  = B2Sme*p
+			q2 = qqpq[-(Np-1):,]
+			q2 = B2Sme*q2
+			return np.vstack([np.vstack([qq, p]), q2])
+
+		ipqqpq1 = _inv_prec(qqpq1)
+		ipqqpq2 = _inv_prec(qqpq2)
+
+		return np.dot(ipqqpq1.T.conj(), ipqqpq2)
+
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -140,8 +182,6 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 					vc[B2BoolInv,] = q2_old 
 					pc = qqp_old[Nv:,]
 
-
-
 			if TsP.Split != 'Full':
 				Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 				if TsP.linatol == 0:
@@ -150,8 +190,11 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 				else:
 					q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 							x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
+							inner_product=smamin_ip,
 							tol=TsP.linatol, maxiter=TsP.MaxIter)
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
+					if q1_tq2_p_q2_new['info'] != 0:
+						raise Warning('no convergence')
 
 				q1_old = qqpq_old[:Nv-(Np-1),]
 
@@ -159,6 +202,7 @@ def halfexp_euler_smarminex(MSme,BSme,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 				vc = np.zeros((Nv,1))
 				vc[~B2BoolInv,] = qqpq_old[:Nv-(Np-1),]
 				vc[B2BoolInv,] = qqpq_old[-(Np-1):,]
+				print np.linalg.norm(vc)
 				pc = qqpq_old[Nv:Nv+Np-1,]
 
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = Pdof)
