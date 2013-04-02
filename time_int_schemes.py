@@ -103,7 +103,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 
 			return np.vstack([np.vstack([qq, p]), q2])
 		
-		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2)#, dtype=np.float32 )
+		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2, dtype=np.float32 )
 		TsP.Ml = MGmr
 	
 	def smamin_ip(qqpq1, qqpq2):
@@ -194,7 +194,11 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 							tol=TsP.linatol, maxiter=TsP.MaxIter)
 					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 					if q1_tq2_p_q2_new['info'] != 0:
+						print q1_tq2_p_q2_new['relresvec'][-5:]
 						raise Warning('no convergence')
+					
+					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1] )
+					print q1_tq2_p_q2_new['relresvec'][-5:]
 
 				q1_old = qqpq_old[:Nv-(Np-1),]
 
