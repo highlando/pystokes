@@ -212,20 +212,20 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 			
 			tcur += dt
 
-		# the errors  
-		vCur, pCur = PrP.v, PrP.p 
-		vCur.t = tcur
-		pCur.t = tcur - dt
+			# the errors and residuals 
+			vCur, pCur = PrP.v, PrP.p 
+			vCur.t = tcur
+			pCur.t = tcur - dt
+
+			ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
+			VelEr.append(errornorm(vCur,v))
+			PEr.append(errornorm(pCur,p))
 
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
 		if TsP.ParaviewOutput:
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
-
-		ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
-		VelEr.append(errornorm(vCur,v))
-		PEr.append(errornorm(pCur,p))
 
 	TsP.Residuals.ContiRes.append(ContiRes)
 	TsP.Residuals.VelEr.append(VelEr)
@@ -275,27 +275,20 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 			tcur += dt
 
-			# if TsP.UseRealPress:
-			# 	PrP.p.t = tcur - dt
-			# 	pexa = project(PrP.p, PrP.Q)
-			# 	pexa = pexa.vector()
-			# 	pexa = pexa.array()[1:,]
-			
+			# the errors  
+			vCur, pCur = PrP.v, PrP.p 
+			vCur.t = tcur 
+			pCur.t = tcur - dt
 
-		# the errors  
-		vCur, pCur = PrP.v, PrP.p 
-		vCur.t = tcur 
-		pCur.t = tcur - dt
+			ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
+			VelEr.append(errornorm(vCur,v))
+			PEr.append(errornorm(pCur,p))
 
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
 		if TsP.ParaviewOutput:
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
-
-		ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
-		VelEr.append(errornorm(vCur,v))
-		PEr.append(errornorm(pCur,p))
 
 	TsP.Residuals.ContiRes.append(ContiRes)
 	TsP.Residuals.VelEr.append(VelEr)
