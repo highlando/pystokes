@@ -92,10 +92,10 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 			qq = MLumpI*qqpq[:Nv,] 
 
 			p  = qqpq[Nv:-(Np-1),]
-			p  = spsla.spsolve(B2Sme.T, p)
+			p  = spsla.spsolve(B2Sme, p)
 			p  = MLumpI2*np.atleast_2d(p).T
-			p  = spsla.spsolve(B2Sme,p)
-			p  = -np.atleast_2d(p).T
+			p  = spsla.spsolve(B2Sme.T,p)
+			p  = np.atleast_2d(p).T
 
 			q2 = qqpq[-(Np-1):,]
 			q2 = spsla.spsolve(B2Sme,q2)
@@ -107,9 +107,9 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 		TsP.Ml = MGmr
 	
 	def smamin_ip(qqpq1, qqpq2):
-		"""good ip for the prec. smamin sys???
+		"""inner product that 'inverts' the preconditioning
 		
-		note that it is indefinite...
+		for better comparability of the residuals, i.e. the tolerances
 		"""
 		def _inv_prec(qqpq):
 			qq = MLump*qqpq[:Nv,] 
@@ -198,7 +198,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 						raise Warning('no convergence')
 					
 					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1] )
-					print q1_tq2_p_q2_new['relresvec'][-5:]
 
 				q1_old = qqpq_old[:Nv-(Np-1),]
 
