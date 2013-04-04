@@ -1,4 +1,5 @@
 from dolfin import *
+
 import numpy as np
 import scipy.sparse as sps
 import matplotlib.pyplot as plt
@@ -8,10 +9,13 @@ import dolfin_to_nparrays as dtn
 import time_int_schemes as tis
 import smartminex_tayhoomesh 
 
+from plot_utils import save_simu
+
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = 3.0
+		self.tE = None
+		self.Omega = None
 		self.Ntslist = [256, 512]#, 1024]#, 2048]
 		self.NOutPutPts = 32
 		self.method = method
@@ -23,9 +27,9 @@ class TimestepParams(object):
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
-		self.ParaviewOutput = True
+		self.ParaviewOutput = False
 
-def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
+def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -45,7 +49,7 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 			3:'HalfExpEulSmaMin'}
 
 	# instantiate object containing mesh, V, Q, velbcs, invinds
-	PrP = ProbParams(N)
+	PrP = ProbParams(N,Omega)
 	# instantiate the Time Int Parameters
 	TsP = TimestepParams(methdict[method], N)
 	if NtsList is not None:
@@ -56,10 +60,13 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 		TsP.Split = Split
 	if MaxIter is not None:
 		TsP.MaxIter = MaxIter
-	if Prec is not None:
-		TsP.SadPtPrec = Prec
+	
+	TsP.tE = tE
+	TsP.Omega = Omega
 
 	print 'Mesh parameter N = %d' % N
+	print 'Time interval [%d,%d]' % (TsP.t0, TsP.tE)
+	print 'Omega = %d' % TsP.Omega
 	print 'You have chosen %s for time integration' % methdict[method]
 	if Split:
 		print 'The system is split'
@@ -131,85 +138,6 @@ def solve_stokesTimeDep(method=None, Split=None, Prec=None, N=None, NtsList=None
 
 	return 
 
-def save_simu(TsP, PrP):
-	import json
-
-	DictOfVals = {'SpaceDiscParam': PrP.N,
-			'Omega': PrP.omega,
-			'TimeInterval':[TsP.t0,TsP.tE],
-			'TimeDiscs': TsP.Ntslist,
-			'LinaTol': TsP.linatol,
-			'TimeIntMeth': TsP.method,
-			'Split': TsP.Split,
-			'ContiRes': TsP.Residuals.ContiRes,
-			'VelEr': TsP.Residuals.VelEr,
-			'PEr': TsP.Residuals.PEr}
-
-	JsFile = 'json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
-
-	f = open(JsFile, 'w')
-	f.write(json.dumps(DictOfVals))
-
-	print 'For the error plot, run \ntts.jsd_plot_errs("' + JsFile + '")'
-
-	return
-
-def load_json_dicts(StrToJs):
-	import json
-	fjs = open(StrToJs)
-	JsDict = json.load(fjs)
-	return JsDict
-
-
-def merge_json_dicts(CurDi,DiToAppend):
-	import json
-
-	Jsc = load_json_dicts(CurDi)
-	Jsa = load_json_dicts(DiToAppend)
-
-	if Jsc['SpaceDiscParam'] != Jsa['SpaceDiscParam'] or Jsc['Omega'] != Jsa['Omega']:
-		raise Warning('Space discretization or omega do not match')
-
-	Jsc['TimeDiscs'].extend(Jsa['TimeDiscs'])
-	Jsc['ContiRes'].extend(Jsa['ContiRes'])
-	Jsc['VelEr'].extend(Jsa['VelEr'])
-	Jsc['PEr'].extend(Jsa['PEr'])
-
-	JsFile = 'json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['Omega'], Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json'
-
-	f = open(JsFile, 'w')
-	f.write(json.dumps(Jsc))
-
-	print '"Merged data stored in ' + JsFile + '"'
-
-	return Jsc
-
-
-def jsd_plot_errs(JsDict):
-
-	JsDict = load_json_dicts(JsDict)
-
-	plt.close('all')
-	for i in range(len(JsDict['TimeDiscs'])):
-		leg = 'NTs = $%d$' % JsDict['TimeDiscs'][i]
-		plt.figure(1)
-		plt.plot(JsDict['ContiRes'][i],label=leg)
-		plt.title(JsDict['TimeIntMeth']+': continuity eqn residual')
-		plt.legend()
-		plt.figure(2)
-		plt.plot(JsDict['VelEr'][i],label=leg)
-		plt.title(JsDict['TimeIntMeth']+': Velocity error')
-		plt.legend()
-		plt.figure(3)
-		plt.plot(JsDict['PEr'][i],label=leg)
-		plt.title(JsDict['TimeIntMeth']+': Pressure error')
-		plt.legend()
-
-	plt.show(block=False)
-
-	return
-
-
 def plot_errs_res(TsP):
 
 	plt.close('all')
@@ -269,18 +197,15 @@ def setget_velbcs_zerosq(mesh, V):
 	return velbcs
 
 class ProbParams(object):
-	def __init__(self,N=None):
-		if N is not None:
-			self.mesh = smartminex_tayhoomesh.getmake_mesh(N)
-		else:
-			self.mesh = smartminex_tayhoomesh.getmake_mesh(16)
+	def __init__(self,N,Omega):
 
+		self.mesh = smartminex_tayhoomesh.getmake_mesh(N)
 		self.N = N
 		self.V = VectorFunctionSpace(self.mesh, "CG", 2)
 		self.Q = FunctionSpace(self.mesh, "CG", 1)
 		self.velbcs = setget_velbcs_zerosq(self.mesh, self.V)
 		self.Pdof = 0  #dof removed in the p approximation
-		self.omega = 3
+		self.omega = Omega
 		self.nu = 0
 		self.fp = Constant((0))
 		self.fv = Expression(("40*nu*pow(x[0],2)*pow(x[1],3)*sin(omega*t) - 60*nu*pow(x[0],2)*pow(x[1],2)*sin(omega*t) + 24*nu*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*sin(omega*t) + 20*nu*pow(x[0],2)*x[1]*sin(omega*t) - 12*nu*pow(x[0],2)*pow((x[0] - 1),2)*sin(omega*t) - 32*nu*x[0]*pow(x[1],3)*sin(omega*t) + 48*nu*x[0]*pow(x[1],2)*sin(omega*t) - 16*nu*x[0]*x[1]*sin(omega*t) + 8*nu*pow(x[1],3)*pow((x[0] - 1),2)*sin(omega*t) - 12*nu*pow(x[1],2)*pow((x[0] - 1),2)*sin(omega*t) + 4*nu*x[1]*pow((x[0] - 1),2)*sin(omega*t) - 4*pow(x[0],3)*pow(x[1],2)*pow((x[0] - 1),3)*(2*x[0] - 1)*pow((x[1] - 1),2)*(2*x[1]*(x[1] - 1) + x[1]*(2*x[1] - 1) + (x[1] - 1)*(2*x[1] - 1) - 2*pow((2*x[1] - 1),2))*pow(sin(omega*t),2) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*omega*cos(omega*t) + 6*pow(x[0],2)*pow(x[1],2)*pow((x[0] - 1),2)*omega*cos(omega*t) - 2*pow(x[0],2)*x[1]*pow((x[0] - 1),2)*omega*cos(omega*t) + 2*x[0]*pow(x[1],2)*sin(omega*t) - 2*x[0]*x[1]*sin(omega*t) - pow(x[1],2)*sin(omega*t) + x[1]*sin(omega*t)", "-40*nu*pow(x[0],3)*pow(x[1],2)*sin(omega*t) + 32*nu*pow(x[0],3)*x[1]*sin(omega*t) - 8*nu*pow(x[0],3)*pow((x[1] - 1),2)*sin(omega*t) + 60*nu*pow(x[0],2)*pow(x[1],2)*sin(omega*t) - 48*nu*pow(x[0],2)*x[1]*sin(omega*t) + 12*nu*pow(x[0],2)*pow((x[1] - 1),2)*sin(omega*t) - 24*nu*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*sin(omega*t) - 20*nu*x[0]*pow(x[1],2)*sin(omega*t) + 16*nu*x[0]*x[1]*sin(omega*t) - 4*nu*x[0]*pow((x[1] - 1),2)*sin(omega*t) + 12*nu*pow(x[1],2)*pow((x[1] - 1),2)*sin(omega*t) + 4*pow(x[0],3)*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) - 4*pow(x[0],2)*pow(x[1],3)*pow((x[0] - 1),2)*pow((x[1] - 1),3)*(2*x[1] - 1)*(2*x[0]*(x[0] - 1) + x[0]*(2*x[0] - 1) + (x[0] - 1)*(2*x[0] - 1) - 2*pow((2*x[0] - 1),2))*pow(sin(omega*t),2) - 6*pow(x[0],2)*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) + 2*pow(x[0],2)*x[1]*sin(omega*t) - pow(x[0],2)*sin(omega*t) + 2*x[0]*pow(x[1],2)*pow((x[1] - 1),2)*omega*cos(omega*t) - 2*x[0]*x[1]*sin(omega*t) + x[0]*sin(omega*t)"), t=0, nu=self.nu, omega = self.omega )
