@@ -175,7 +175,7 @@ def merge_json_dicts(CurDi,DiToAppend):
 	Jsc['VelEr'].extend(Jsa['VelEr'])
 	Jsc['PEr'].extend(Jsa['PEr'])
 
-	JsFile = 'json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json'
+	JsFile = 'json/MrgdOmeg%dTol%0.0eNTs%dto%dMesh%d' % (Jsc['Omega'], Jsc['LinaTol'], Jsc['TimeDiscs'][0], Jsc['TimeDiscs'][-1], Jsc['SpaceDiscParam']) +Jsc['TimeIntMeth'] + '.json'
 
 	f = open(JsFile, 'w')
 	f.write(json.dumps(Jsc))

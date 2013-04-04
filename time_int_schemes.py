@@ -197,7 +197,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 						print q1_tq2_p_q2_new['relresvec'][-5:]
 						raise Warning('no convergence')
 					
-					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1] )
+					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-2] )
 
 				q1_old = qqpq_old[:Nv-(Np-1),]
 
