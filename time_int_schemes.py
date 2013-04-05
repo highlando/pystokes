@@ -252,6 +252,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
+
 	for etap in range(1,TsP.NOutPutPts + 1 ):
 		for i in range(Nts/TsP.NOutPutPts):
 
@@ -270,7 +271,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			else:
 				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol)
 				vp_old = ret['xk'] 
-			
+
 			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
 
 			tcur += dt
@@ -475,5 +476,8 @@ def init_time_stepping(PrP,TsP):
 	dt = (tE-t0)/Nts
 	Nv = len(PrP.invinds)
 	Np = PrP.Q.dim()
+
+	if Nts % TsP.NOutPutPts != 0:
+		TsP.NOutPutPts = 1
 
 	return Nts, t0, tE, dt, Nv, Np

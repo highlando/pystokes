@@ -12,7 +12,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 
 	def test_collectB2(self):
 
-		from time_int_schemes import col_columns_atend
+		from smamin_utils import col_columns_atend
 		
 		N = 100
 		n = 7
@@ -42,7 +42,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		from dolfin import *
 		import test_time_schemes as tts
 		import dolfin_to_nparrays as dtn
-		from time_int_schemes import col_columns_atend, revert_sort_tob2
+		from smamin_utils import col_columns_atend, revert_sort_tob2
 		import smartminex_tayhoomesh
 
 		N = 32 
@@ -61,7 +61,7 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		# indices of the inner velocity nodes
 		invinds = np.setdiff1d(range(V.dim()),bcinds)
 
-		Ma, Aa, BTa, Ba = dtn.get_sysNSmats(V, Q)
+		Ma, Aa, BTa, Ba, MPa = dtn.get_sysNSmats(V, Q)
 
 		Mc = Ma[invinds,:][:,invinds]
 		Ac = Aa[invinds,:][:,invinds]
@@ -163,9 +163,9 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		eocc = np.zeros(len(self.Nlist))
 
 		for k, N in enumerate(self.Nlist):
-			PrP = tts.ProbParams(N)
+			PrP = tts.ProbParams(N,12)
 			# get system matrices as np.arrays
-			Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
+			Ma, Aa, BTa, Ba, MPa= dtn.get_sysNSmats(PrP.V, PrP.Q)
 
 			tcur = self.tcur
 
@@ -227,9 +227,9 @@ class TestSmaMinTexFunctions(unittest.TestCase):
 		eocc = np.zeros(len(self.Nlist))
 
 		for k, N in enumerate(self.Nlist):
-			PrP = tts.ProbParams(N)
+			PrP = tts.ProbParams(N,8)
 			# get system matrices as np.arrays
-			Ma, Aa, BTa, Ba = dtn.get_sysNSmats(PrP.V, PrP.Q)
+			Ma, Aa, BTa, Ba, MPa = dtn.get_sysNSmats(PrP.V, PrP.Q)
 
 			tcur = self.tcur
 
