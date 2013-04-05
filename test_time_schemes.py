@@ -65,7 +65,7 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 	TsP.Omega = Omega
 
 	print 'Mesh parameter N = %d' % N
-	print 'Time interval [%d,%d]' % (TsP.t0, TsP.tE)
+	print 'Time interval [%d,%1.2f]' % (TsP.t0, TsP.tE)
 	print 'Omega = %d' % TsP.Omega
 	print 'You have chosen %s for time integration' % methdict[method]
 	if Split:
