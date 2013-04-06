@@ -8,9 +8,16 @@ from scipy.linalg import qr
 import dolfin_to_nparrays as dtn
 
 ###
-# solve M\dot v + Av -B'p = fv
+# solve M\dot v + K(v) -B'p = fv
 #                 Bv      = fpbc
 ###
+
+def mass_fem_ip(q1,q2,M):
+	"""M^-1 inner product
+
+	"""
+	return np.dot(q1.T,krypy.linsys.cg(M,q2,tol=1e-12)['xk'])
+
 
 def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 1 formulation
@@ -49,7 +56,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 	# cf. preprint
 	#
 
-
 	IterA1 = sps.hstack([MSme,-dt*BSme.T])
 
 	# Multiply by -dt for symmetry
@@ -65,20 +71,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 				IterA3])
 
 	Mqqpq = None #sps.block_diag((MSme,MPc,MPc))
-
-	### Inner product for Smart Min
-	#IP1 = sps.hstack([M1Sme[:-Npc,:],
-	#	sps.hstack([sps.csr_matrix((Nv-Npc,2*Npc)), M2Sme[:-Npc,:]]) ])
-	#IP2 = sps.csr_matrix((Npc, Nv + 2*Npc))
-	#IP3 = sps.hstack([sps.csr_matrix((Npc,Nv)),
-	#	sps.hstack([MPc, sps.csr_matrix((Npc,Npc))]) ])
-	#IP4 = sps.hstack([M1Sme[-Npc:,:],
-	#	sps.hstack([sps.csr_matrix((Npc,2*Npc)), M2Sme[-Npc:,:]]) ])
-	#
-	#IP = sps.vstack([ sps.vstack([IP1, IP2 ]),
-	#			sps.vstack([IP3, IP4 ]) ])
-
-
 
 	## Preconditioning ...
 	#
@@ -106,6 +98,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2, dtype=np.float32 )
 		TsP.Ml = MGmr
 	
+
+	
 	def smamin_ip(qqpq1, qqpq2):
 		"""inner product that 'inverts' the preconditioning
 		
@@ -119,13 +113,13 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 			p  = B2Sme*p
 			q2 = qqpq[-(Np-1):,]
 			q2 = B2Sme*q2
-			return np.vstack([np.vstack([qq, p]), q2])
+			return qq, p, q2
 
-		ipqqpq1 = _inv_prec(qqpq1)
-		ipqqpq2 = _inv_prec(qqpq2)
+		qq1,p1,q21 = _inv_prec(qqpq1)
+		qq2,p2,q22 = _inv_prec(qqpq2)
 
-		return np.dot(ipqqpq1.T.conj(), ipqqpq2)
-
+		return mass_fem_ip(qq1,qq2,MSme) + mass_fem_ip(p1,p2,MPc) + mass_fem_ip(q21,q22,MPc)
+	
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -245,7 +239,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	IterAv = sps.hstack([Mc+0*dt*Ac,-dt*BTc[:,:-1]])
+	IterAv = sps.hstack([Mc,-dt*BTc[:,:-1]])
 	#-dt*Bc = conti mult. by -dt, to make it symmetric for using minres
 	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
@@ -262,7 +256,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ np.vstack([dt*(fvbc+CurFv-0*Ac*vp_old[:Nv,]-ConV[PrP.invinds,]),
+					+ np.vstack([dt*(fvbc+CurFv-ConV[PrP.invinds,]),
 						-dt*fpbc[:-1,]])
 
 			if TsP.linatol == 0:
