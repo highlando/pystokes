@@ -1,28 +1,6 @@
 import json
 import matplotlib.pyplot as plt
 
-def save_simu(TsP, PrP):
-
-	DictOfVals = {'SpaceDiscParam': PrP.N,
-			'Omega': PrP.omega,
-			'TimeInterval':[TsP.t0,TsP.tE],
-			'TimeDiscs': TsP.Ntslist,
-			'LinaTol': TsP.linatol,
-			'TimeIntMeth': TsP.method,
-			'Split': TsP.Split,
-			'ContiRes': TsP.Residuals.ContiRes,
-			'VelEr': TsP.Residuals.VelEr,
-			'PEr': TsP.Residuals.PEr}
-
-	JsFile = 'json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
-
-	f = open(JsFile, 'w')
-	f.write(json.dumps(DictOfVals))
-
-	print 'For the error plot, run \nplu.jsd_plot_errs("' + JsFile + '")'
-
-	return
-
 def load_json_dicts(StrToJs):
 
 	fjs = open(StrToJs)

@@ -9,27 +9,25 @@ import dolfin_to_nparrays as dtn
 import time_int_schemes as tis
 import smartminex_tayhoomesh 
 
-from plot_utils import save_simu
-
 class TimestepParams(object):
 	def __init__(self, method, N):
 		self.t0 = 0
-		self.tE = None
-		self.Omega = None
-		self.Ntslist = [256, 512]#, 1024]#, 2048]
+		self.tE = 1.0
+		self.Omega = 2
+		self.Ntslist = [32]
 		self.NOutPutPts = 32
 		self.method = method
 		self.Split = None  #Can be 'Full' and 'Semi'
 		self.SadPtPrec = True
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
-		self.linatol = 1e-4 #1e-8   # 0 for direct sparse solver
+		self.linatol = 1e-4 # 0 for direct sparse solver
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = False
 
-def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
+def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -42,16 +40,19 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 
 	if method is None:
 		method = 2
+	
+	if Omega is None:
+		Omega = 3
 
-	methdict = {0:'ImpEulFull', 
-			1:'ImpEulQr', 
+	methdict = {
 			2:'HalfExpEulInd2',
 			3:'HalfExpEulSmaMin'}
 
-	# instantiate object containing mesh, V, Q, velbcs, invinds
+	# instantiate object containing mesh, V, Q, rhs, velbcs, invinds
 	PrP = ProbParams(N,Omega)
 	# instantiate the Time Int Parameters
 	TsP = TimestepParams(methdict[method], N)
+
 	if NtsList is not None:
 		TsP.Ntslist = NtsList
 	if LinaTol is not None:
@@ -60,9 +61,10 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 		TsP.Split = Split
 	if MaxIter is not None:
 		TsP.MaxIter = MaxIter
-	
-	TsP.tE = tE
-	TsP.Omega = Omega
+	if tE is not None: 
+		TsP.tE = tE
+	if Omega is not None:
+		TsP.Omega = Omega
 
 	print 'Mesh parameter N = %d' % N
 	print 'Time interval [%d,%1.2f]' % (TsP.t0, TsP.tE)
@@ -80,7 +82,8 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 	Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
-	if method > 2:
+	if method == 3:
+		# Rearrange the matrices and rhs
 		from smamin_utils import col_columns_atend
 
 		MSmeCL, BSme, B2Inds, B2BoolInv, B2BI = smartminex_tayhoomesh.get_smamin_rearrangement(N,PrP,Mc,Bc)
@@ -90,19 +93,23 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 
 		PrP.Pdof = 0 # Thats how the smamin is constructed
 	
-
 	### Output
+	try:
+		os.chdir('json')
+	except OSError:
+		raise Warning('need "json" subdirectory for storing the data')
+	os.chdir('..')
+
 	if TsP.ParaviewOutput :
-		if not os.getcwd().split(os.sep)[-1] == 'pystokes':
-			raise Warning('You are not in the right directory')
-		
+		try:
+			os.chdir('results')
+		except OSError:
+			raise Warning('need "results" subdirectory for Paraview output')
 		os.chdir('results/')
 		for fname in glob.glob(TsP.method + '*'):
 			os.remove( fname )
-
 		os.chdir('..')
 
-	
 	###
 	# Time stepping
 	###
@@ -113,12 +120,7 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 	for i, CurNTs in enumerate(TsP.Ntslist):
 		TsP.Nts = CurNTs
 
-		if method == 0:
-			tis.plain_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init, 
-					PrP,TsP=TsP)
-		elif method == 1:
-			tis.qr_impeuler(Mc,Ac,BTc,Bc,fvbc,fp,vp_init,PrP,TsP=TsP)
-		elif method == 2:
+		if method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
 		elif method == 3:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
@@ -127,15 +129,8 @@ def solve_stokesTimeDep(method=None, Omega=3, tE=1.0, Split=None, Prec=None, N=N
 		# Output only in first iteration!
 		TsP.ParaviewOutput = False
 	
-	save_simu(TsP, PrP)
-	#plot_errs_res(TsP)
+	JsD = save_simu(TsP, PrP)
 		
-	#vp_stat = np.linalg.solve(sadSysmat[:-1,:-1],np.vstack([fvc,fp[:-1],]))
-	#v, p = expand_vp_dolfunc(invinds,velbcs,V,Q,
-	#		vp=vp_stat,vc=None,pc=None)
-	# u_file << v, 1
-	#p_file << p, 1
-
 	return 
 
 def plot_errs_res(TsP):
@@ -195,6 +190,29 @@ def setget_velbcs_zerosq(mesh, V):
 	velbcs = [bc0, bc1]
 
 	return velbcs
+
+def save_simu(TsP, PrP):
+	import json
+	DictOfVals = {'SpaceDiscParam': PrP.N,
+			'Omega': PrP.omega,
+			'TimeInterval':[TsP.t0,TsP.tE],
+			'TimeDiscs': TsP.Ntslist,
+			'LinaTol': TsP.linatol,
+			'TimeIntMeth': TsP.method,
+			'Split': TsP.Split,
+			'ContiRes': TsP.Residuals.ContiRes,
+			'VelEr': TsP.Residuals.VelEr,
+			'PEr': TsP.Residuals.PEr}
+
+	JsFile = 'json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
+
+	f = open(JsFile, 'w')
+	f.write(json.dumps(DictOfVals))
+
+	print 'For the error plot, run\nimport plot_utils as plu\nplu.jsd_plot_errs("' + JsFile + '")'
+
+	return Jsd
+
 
 class ProbParams(object):
 	def __init__(self,N,Omega):
