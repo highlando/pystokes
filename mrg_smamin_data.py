@@ -1,4 +1,4 @@
-tol = '05'
+tol = '06'
 
 plu.merge_json_dicts(    'json/Omeg8Tol1e-' + tol + 'NTs16to16Mesh40HalfExpEulSmaMin.json',
 					     'json/Omeg8Tol1e-' + tol + 'NTs32to32Mesh40HalfExpEulSmaMin.json')
