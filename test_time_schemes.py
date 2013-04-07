@@ -25,7 +25,7 @@ class TimestepParams(object):
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
-		self.ParaviewOutput = False
+		self.ParaviewOutput = True
 
 def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
 	"""system to solve
@@ -102,10 +102,6 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 	os.chdir('..')
 
 	if TsP.ParaviewOutput :
-		try:
-			os.chdir('results')
-		except OSError:
-			raise Warning('need "results" subdirectory for Paraview output')
 		os.chdir('results/')
 		for fname in glob.glob(TsP.method + '*'):
 			os.remove( fname )

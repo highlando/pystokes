@@ -12,12 +12,6 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
-def mass_fem_ip(q1,q2,M):
-	"""M^-1 inner product
-
-	"""
-	return np.dot(q1.T,krypy.linsys.cg(M,q2,tol=1e-12)['xk'])
-
 
 def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 1 formulation
@@ -48,29 +42,24 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 	
 	#### The matrix to be solved in every time step
 	#
-	# 		M11    M12  -dt*B2'  0          q1
-	# 		M21    M22  -dt*B1'  0       dt*tq2
-	# 		B1     B2      0     0   *      p     = rhs
-	# 		B1     0       0     B2 	    q2  
+	# 		M11    M12  B2'  0          q1
+	# 		M21    M22  B1'  0         dt*tq2
+	# 		B1     B2   0    0   *    -dt*p     = rhs
+	# 		B1     0    0    B2 	    q2  
 	# 						    		 
 	# cf. preprint
 	#
 
-	IterA1 = sps.hstack([MSme,-dt*BSme.T])
-
-	# Multiply by -dt for symmetry
-	IterA2 = sps.hstack([-dt*BSme, sps.csr_matrix((Np-1, Np-1))])
-
+	IterA1 = sps.hstack([MSme,BSme.T])
+	IterA2 = sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
 	IterASp = sps.vstack([IterA1,IterA2])
-	
+
 	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
 		B2Sme])
 
 	IterA = sps.vstack([
 		sps.hstack([IterASp, sps.csr_matrix((Nv+Np-1,Np-1))]),
 				IterA3])
-
-	Mqqpq = None #sps.block_diag((MSme,MPc,MPc))
 
 	## Preconditioning ...
 	#
@@ -93,7 +82,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 			q2 = spsla.spsolve(B2Sme,q2)
 			q2 = np.atleast_2d(q2).T
 
-			return np.vstack([np.vstack([qq, p]), q2])
+			return np.vstack([np.vstack([qq, -p]), q2])
 		
 		MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2, dtype=np.float32 )
 		TsP.Ml = MGmr
@@ -103,6 +92,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 	def smamin_ip(qqpq1, qqpq2):
 		"""inner product that 'inverts' the preconditioning
 		
+		and weights the conti residuals 
 		for better comparability of the residuals, i.e. the tolerances
 		"""
 		def _inv_prec(qqpq):
@@ -118,8 +108,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 		qq1,p1,q21 = _inv_prec(qqpq1)
 		qq2,p2,q22 = _inv_prec(qqpq2)
 
-		return mass_fem_ip(qq1,qq2,MSme) + mass_fem_ip(p1,p2,MPc) + mass_fem_ip(q21,q22,MPc)
-	
+		return np.dot(qq1.T.conj(),qq2) + 0.5*np.dot(p1.T.conj(),p2) + 0.5*np.dot(q21.T.conj(),q22)
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -138,7 +127,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 	qqpq_old = np.zeros((Nv+2*(Np-1),1))
 	qqpq_old[:Nv-(Np-1),] = q1_old
 	qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
-	qqpq_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	qqpq_old[Nv:Nv+Np-1,] = -1.0/dt*vp_old[Nv:,]
 	qqpq_old[Nv+Np-1:,] = q2_old
 
 	qqp_old = qqpq_old[:Nv+Np-1,]
@@ -151,7 +140,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
+			Iterrhs = np.vstack([M1Sme*q1_old, B1Sme*q1_old]) \
 						+ dt*np.vstack([FvbcSme+CurFv-ConV,gdot])
 
 			if TsP.Split == 'Full' or TsP.Split == 'Semi':
@@ -191,7 +180,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 						print q1_tq2_p_q2_new['relresvec'][-5:]
 						raise Warning('no convergence')
 					
-					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-2] )
+					print 'Needed %d of max  %r iterations: final relres = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1] )
 
 				q1_old = qqpq_old[:Nv-(Np-1),]
 
@@ -200,7 +189,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 				vc[~B2BoolInv,] = qqpq_old[:Nv-(Np-1),]
 				vc[B2BoolInv,] = qqpq_old[-(Np-1):,]
 				print np.linalg.norm(vc)
-				pc = qqpq_old[Nv:Nv+Np-1,]
+				pc = -1.0/dt*qqpq_old[Nv:Nv+Np-1,]
 
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = Pdof)
 			
@@ -309,7 +298,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		qq1,p1 = _inv_prec(qqp1)
 		qq2,p2 = _inv_prec(qqp2)
 
-		return np.dot(qq1.T.conj(),qq2) + 2*np.dot(p1.T.conj(),p2) 
+		return np.dot(qq1.T.conj(),qq2) + np.dot(p1.T.conj(),p2) 
 	
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
@@ -382,6 +371,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	TsP.Residuals.PEr.append(PEr)
 		
 	return
+
 def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
@@ -394,19 +384,19 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	IterAv = sps.hstack([Mc,-dt*BTc[:,:-1]])
+	IterAv = sps.hstack([Mc,BTc[:,:-1]])
 	#-dt*Bc = conti mult. by -dt, to make it symmetric for using minres
-	IterAp = sps.hstack([-dt*Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	IterAp = sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
 	
 	def ind2_ip(vp1,vp2):
-		"""to weight the conti eqn double
+		"""to weight the conti eqn 
 
 		for better comparability with ind1, 
-		there are two conti eqns
+		where there are two conti eqns
 		"""
 		v1, v2 = vp1[:Nv,], vp2[:Nv,]
 		p1, p2 = vp1[Nv:,], vp2[Nv:,]
@@ -415,14 +405,12 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	for etap in range(1,TsP.NOutPutPts + 1 ):
 		for i in range(Nts/TsP.NOutPutPts):
 
-			#vp_old[Nv:,0] = 0 
-
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
 			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
 					+ np.vstack([dt*(fvbc+CurFv-ConV[PrP.invinds,]),
-						-dt*fpbc[:-1,]])
+						fpbc[:-1,]])
 
 			if TsP.linatol == 0:
 				vp_new = spsla.spsolve(IterA,Iterrhs)#,vp_old,tol=TsP.linatol)
@@ -431,7 +419,10 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol, inner_product=ind2_ip)
 				vp_old = ret['xk'] 
 
-			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
+			vc = vp_old[:Nv,]
+			pc = -1.0/dt*vp_old[Nv:,]
+
+			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc)
 
 			tcur += dt
 
