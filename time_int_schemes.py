@@ -257,18 +257,17 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	
 	#### The matrix to be solved in every time step
 	#
-	# 		M11    M12  -dt*B2'  0          q1
-	# 		M21    M22  -dt*B1'  0       dt*tq2
-	# 		B1     B2      0     0   *      p     = rhs
-	# 		B1     0       0     B2 	    q2  
+	# 		M11    M12  B2'          	q1
+	# 		M21    M22  B1'          	q2
+	# 		B1     B2   0       *    -dt*p     = rhs
 	# 						    		 
 	# cf. preprint
 	#
 
-	IterA1 = sps.hstack([MSme,-dt*BSme.T])
+	IterA1 = sps.hstack([MSme,BSme.T])
 
 	# Multiply by -dt for symmetry
-	IterA2 = sps.hstack([-dt*BSme, sps.csr_matrix((Np-1, Np-1))])
+	IterA2 = sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
 
 	IterASp = sps.vstack([IterA1,IterA2])
 	
@@ -279,18 +278,18 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 	MLumpI = 1./MLump
 	MLumpI1 = MLumpI[:-(Np-1),]
 	MLumpI2 = MLumpI[-(Np-1):,]
-	def PrecByB2(qqpq):
-		qq = MLumpI*qqpq[:Nv,] 
+	def PrecByB2(qqp):
+		qq = MLumpI*qqp[:Nv,] 
 
-		p  = qqpq[Nv:-(Np-1),]
+		p  = qqp[Nv:,]
 		p  = spsla.spsolve(B2Sme, p)
 		p  = MLumpI2*np.atleast_2d(p).T
 		p  = spsla.spsolve(B2Sme.T,p)
 		p  = np.atleast_2d(p).T
 
-		return np.vstack([qq, p])
+		return np.vstack([qq, -p])
 	
-	MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2, dtype=np.float32 )
+	MGmr = spsla.LinearOperator( (Nv+(Np-1),Nv+(Np-1)), matvec=PrecByB2, dtype=np.float32 )
 	TsP.Ml = MGmr
 	
 	def ind2ra_ip(qqp1, qqp2):
@@ -301,7 +300,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		"""
 		def _inv_prec(qqp):
 			qq = MLump*qqp[:Nv,] 
-			p  = qqp[Nv:-(Np-1),]
+			p  = qqp[Nv:,]
 			p  = B2Sme.T*p
 			p  = MLump2*p
 			p  = B2Sme*p
@@ -310,7 +309,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		qq1,p1 = _inv_prec(qqp1)
 		qq2,p2 = _inv_prec(qqp2)
 
-		return np.dot(qq1,qq2) + 2*np.dot(p1,p2) 
+		return np.dot(qq1.T.conj(),qq2) + 2*np.dot(p1.T.conj(),p2) 
 	
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
@@ -335,14 +334,16 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		for i in range(Nts/TsP.NOutPutPts):
 			ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
 
-			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
-						+ dt*np.vstack([FvbcSme+CurFv-ConV,FpbcSmeC])
+			Iterrhs = np.vstack([M1Sme*q1_old + M2Sme*q2_old 
+				+ dt*(FvbcSme+CurFv-ConV),
+					FpbcSmeC])
 
 			if TsP.linatol == 0:
 				q1_q2_p_new = spsla.spsolve(IterASp,Iterrhs) 
 				qqp_old = np.atleast_2d(q1_q2_p_new).T
 			else:
 				q1_q2_p_new = krypy.linsys.minres(IterASp, Iterrhs,
+						#Ml = TsP.Ml, inner_product=ind2ra_ip,
 						x0=qqp_old, maxiter=TsP.MaxIter, tol=TsP.linatol) 
 				qqp_old = np.atleast_2d(q1_q2_p_new['xk'])
 
@@ -353,7 +354,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 				vc = np.zeros((Nv,1))
 				vc[~B2BoolInv,] = q1_old 
 				vc[B2BoolInv,] = q2_old 
-				pc = qqp_old[Nv:,]
+				pc = -1.0/dt*qqp_old[Nv:,]
 
 				print 'Needed %d iterations -- prefinal relres = %e' %(len(q1_q2_p_new['relresvec']), q1_q2_p_new['relresvec'][-2] )
 
