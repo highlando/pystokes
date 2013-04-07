@@ -299,9 +299,9 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		and doubles the weight on the conti eqn
 		for better comparability of the residuals, i.e. the tolerances
 		"""
-		def _inv_prec(qqpq):
-			qq = MLump*qqpq[:Nv,] 
-			p  = qqpq[Nv:-(Np-1),]
+		def _inv_prec(qqp):
+			qq = MLump*qqp[:Nv,] 
+			p  = qqp[Nv:-(Np-1),]
 			p  = B2Sme.T*p
 			p  = MLump2*p
 			p  = B2Sme*p
@@ -310,7 +310,7 @@ def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP)
 		qq1,p1 = _inv_prec(qqp1)
 		qq2,p2 = _inv_prec(qqp2)
 
-		return np.dot(qq1,qq2,MSme) + 2*np.dot(p1,p2,MPc) 
+		return np.dot(qq1,qq2) + 2*np.dot(p1,p2) 
 	
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
