@@ -45,8 +45,9 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 		Omega = 3
 
 	methdict = {
+			1:'HalfExpEulSmaMin',
 			2:'HalfExpEulInd2',
-			3:'HalfExpEulSmaMin'}
+			3:'Heei2Ra'}
 
 	# instantiate object containing mesh, V, Q, rhs, velbcs, invinds
 	PrP = ProbParams(N,Omega)
@@ -82,7 +83,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 	Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, invinds = \
 			dtn.condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,PrP.velbcs)
 	
-	if method == 3:
+	if method != 2:
 		# Rearrange the matrices and rhs
 		from smamin_utils import col_columns_atend
 
@@ -121,9 +122,13 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 		TsP.Nts = CurNTs
 
 		if method == 2:
-			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP=TsP)
-		elif method == 3:
+			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,
+					vp_init,PrP,TsP=TsP)
+		elif method == 1:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
+					vp_init,B2BoolInv,PrP,TsP)
+		elif method == 3:
+			tis.halfexp_euler_ind2ra(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
 					vp_init,B2BoolInv,PrP,TsP)
 
 		# Output only in first iteration!
@@ -211,7 +216,7 @@ def save_simu(TsP, PrP):
 
 	print 'For the error plot, run\nimport plot_utils as plu\nplu.jsd_plot_errs("' + JsFile + '")'
 
-	return Jsd
+	return 
 
 
 class ProbParams(object):
