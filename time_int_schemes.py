@@ -397,7 +397,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			else:
 				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol)
 				vp_old = ret['xk'] 
-				print 'Needed %d iterations -- prefinal relres = %e' %(len(ret['relresvec']), ret['relresvec'][-2] )
+				print 'Needed %d iterations -- final relres = %e' %(len(ret['relresvec']), ret['relresvec'][-1] )
 
 			vc = vp_old[:Nv,]
 			pc = -1.0/dt*vp_old[Nv:,]
