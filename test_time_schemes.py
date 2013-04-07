@@ -17,7 +17,6 @@ class TimestepParams(object):
 		self.Ntslist = [32]
 		self.NOutPutPts = 32
 		self.method = method
-		self.Split = None  #Can be 'Full' and 'Semi'
 		self.SadPtPrec = True
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
@@ -27,7 +26,7 @@ class TimestepParams(object):
 		self.Mr = None
 		self.ParaviewOutput = True
 
-def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None):
+def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -58,8 +57,6 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 		TsP.Ntslist = NtsList
 	if LinaTol is not None:
 		TsP.linatol = LinaTol
-	if Split is not None:
-		TsP.Split = Split
 	if MaxIter is not None:
 		TsP.MaxIter = MaxIter
 	if tE is not None: 
@@ -71,8 +68,6 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Split=None, Prec=None,
 	print 'Time interval [%d,%1.2f]' % (TsP.t0, TsP.tE)
 	print 'Omega = %d' % TsP.Omega
 	print 'You have chosen %s for time integration' % methdict[method]
-	if Split:
-		print 'The system is split'
 	print 'The tolerance for the linear solver is %e' %TsP.linatol
 
 	# get system matrices as np.arrays
@@ -200,7 +195,6 @@ def save_simu(TsP, PrP):
 			'TimeDiscs': TsP.Ntslist,
 			'LinaTol': TsP.linatol,
 			'TimeIntMeth': TsP.method,
-			'Split': TsP.Split,
 			'ContiRes': TsP.Residuals.ContiRes,
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
