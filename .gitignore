@@ -5,6 +5,7 @@
 *.pvd
 *.vtu
 *.xml
+*.mat
 
 # C extensions
 *.so

@@ -227,6 +227,190 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 		
 	return
 
+def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
+	"""halfexplicit euler for the NSE in index 2 formulation
+
+	but with the smamin formulation for prec...
+	"""
+
+	N, Pdof = PrP.N, PrP.Pdof
+
+	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
+	tcur = t0
+
+	Npc = Np-1
+
+	# remove the p - freedom
+	if Pdof == 0:
+		BSme  = BSme[1:,:]
+		FpbcSmeC = FpbcSme[1:,]
+		MPc = MP[1:,:][:,1:]
+	else:
+		BSme  = sps.vstack([BSme[:Pdof,:],BSme[Pdof+1:,:]])
+		raise Warning('TODO: Implement this')
+
+	B1Sme = BSme[:,:Nv-(Np-1)]
+	B2Sme = BSme[:,Nv-(Np-1):]
+
+	M1Sme = MSme[:,:Nv-(Np-1)]
+	M2Sme = MSme[:,Nv-(Np-1):]
+	
+	#### The matrix to be solved in every time step
+	#
+	# 		M11    M12  -dt*B2'  0          q1
+	# 		M21    M22  -dt*B1'  0       dt*tq2
+	# 		B1     B2      0     0   *      p     = rhs
+	# 		B1     0       0     B2 	    q2  
+	# 						    		 
+	# cf. preprint
+	#
+
+	IterA1 = sps.hstack([MSme,-dt*BSme.T])
+
+	# Multiply by -dt for symmetry
+	IterA2 = sps.hstack([-dt*BSme, sps.csr_matrix((Np-1, Np-1))])
+
+	IterASp = sps.vstack([IterA1,IterA2])
+	
+	## Preconditioning ...
+	#
+	MLump = np.atleast_2d(MSme.diagonal()).T
+	MLump2 =  MLump[-(Np-1):,]
+	MLumpI = 1./MLump
+	MLumpI1 = MLumpI[:-(Np-1),]
+	MLumpI2 = MLumpI[-(Np-1):,]
+	def PrecByB2(qqpq):
+		qq = MLumpI*qqpq[:Nv,] 
+
+		p  = qqpq[Nv:-(Np-1),]
+		p  = spsla.spsolve(B2Sme, p)
+		p  = MLumpI2*np.atleast_2d(p).T
+		p  = spsla.spsolve(B2Sme.T,p)
+		p  = np.atleast_2d(p).T
+
+		return np.vstack([qq, p])
+	
+	MGmr = spsla.LinearOperator( (Nv+2*(Np-1),Nv+2*(Np-1)), matvec=PrecByB2, dtype=np.float32 )
+	TsP.Ml = MGmr
+	
+	def ind2ra_ip(qqp1, qqp2):
+		"""inner product that 'inverts' the preconditioning
+		
+		and doubles the weight on the conti eqn
+		for better comparability of the residuals, i.e. the tolerances
+		"""
+		def _inv_prec(qqpq):
+			qq = MLump*qqpq[:Nv,] 
+			p  = qqpq[Nv:-(Np-1),]
+			p  = B2Sme.T*p
+			p  = MLump2*p
+			p  = B2Sme*p
+			return qq, p
+
+		qq1,p1 = _inv_prec(qqp1)
+		qq2,p2 = _inv_prec(qqp2)
+
+		return np.dot(qq1,qq2,MSme) + 2*np.dot(p1,p2,MPc) 
+	
+
+	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
+	TsP.UpFiles.u_file << v, tcur
+	TsP.UpFiles.p_file << p, tcur
+
+	vp_old = np.copy(vp_init)
+	q1_old = vp_init[~B2BoolInv,]
+	q2_old = vp_init[B2BoolInv,]
+	# initial value for tq2
+	ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
+
+	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
+	qqp_old = np.zeros((Nv+(Np-1),1))
+	qqp_old[:Nv-(Np-1),] = q1_old
+	qqp_old[Nv:Nv+Np-1,] = vp_old[Nv:,]
+	qqp_old[Nv+Np-1:,] = q2_old
+
+	ContiRes, VelEr, PEr = [], [], []
+
+	for etap in range(1,TsP.NOutPutPts +1 ):
+		for i in range(Nts/TsP.NOutPutPts):
+			ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
+
+			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
+
+			Iterrhs = np.vstack([M1Sme*q1_old, -dt*B1Sme*q1_old]) \
+						+ dt*np.vstack([FvbcSme+CurFv-ConV,gdot])
+
+			if TsP.linatol == 0:
+				q1_tq2_p_new = spsla.spsolve(IterASp,Iterrhs) 
+				qqp_old = np.atleast_2d(q1_tq2_p_new).T
+			else:
+				q1_tq2_p_new = krypy.linsys.minres(IterASp, Iterrhs,
+						x0=qqp_old, maxiter=TsP.MaxIter, tol=TsP.linatol) 
+				qqp_old = np.atleast_2d(q1_tq2_p_new['xk'])
+
+				if TsP.Split == 'Semi':
+					qqpq_old[:Nv+Np-1,] = qqp_old
+				else:
+					q1_old = qqp_old[:Nv-(Np-1),]
+					q2_old = spsla.spsolve(B2Sme, FpbcSmeC - B1Sme*q1_old) 
+					q2_old = np.atleast_2d(q2_old).T
+					qSmaMin = np.vstack([q1_old, q2_old])
+					# Extract the 'actual' velocity and pressure
+					vc = np.zeros((Nv,1))
+					vc[~B2BoolInv,] = q1_old 
+					vc[B2BoolInv,] = q2_old 
+					pc = qqp_old[Nv:,]
+
+			if TsP.Split != 'Full':
+				Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
+				if TsP.linatol == 0:
+					q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
+					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
+				else:
+					q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
+							x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
+							inner_product=smamin_ip,
+							tol=TsP.linatol, maxiter=TsP.MaxIter)
+					qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
+					if q1_tq2_p_q2_new['info'] != 0:
+						print q1_tq2_p_q2_new['relresvec'][-5:]
+						raise Warning('no convergence')
+					
+					print 'Needed %d of max  %d iterations: final resrel = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-2] )
+
+				q1_old = qqpq_old[:Nv-(Np-1),]
+
+				# Extract the 'actual' velocity and pressure
+				vc = np.zeros((Nv,1))
+				vc[~B2BoolInv,] = qqpq_old[:Nv-(Np-1),]
+				vc[B2BoolInv,] = qqpq_old[-(Np-1):,]
+				print np.linalg.norm(vc)
+				pc = qqpq_old[Nv:Nv+Np-1,]
+
+			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = Pdof)
+			
+			tcur += dt
+
+			# the errors and residuals 
+			vCur, pCur = PrP.v, PrP.p 
+			vCur.t = tcur
+			pCur.t = tcur - dt
+
+			ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
+			VelEr.append(errornorm(vCur,v))
+			PEr.append(errornorm(pCur,p))
+
+		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
+
+		if TsP.ParaviewOutput:
+			TsP.UpFiles.u_file << v, tcur
+			TsP.UpFiles.p_file << p, tcur
+
+	TsP.Residuals.ContiRes.append(ContiRes)
+	TsP.Residuals.VelEr.append(VelEr)
+	TsP.Residuals.PEr.append(PEr)
+		
+	return
 def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
@@ -246,6 +430,16 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	vp_old = vp_init
 	ContiRes, VelEr, PEr = [], [], []
+	
+	def ind2_ip(vp1,vp2):
+		"""to weight the conti eqn double
+
+		for better comparability with ind1, 
+		there are two conti eqns
+		"""
+		v1, v2 = vp1[:Nv,], vp2[:Nv,]
+		p1, p2 = vp1[Nv:,], vp2[Nv:,]
+		return np.dot(v1.T.conj(),v2)+np.dot(p1.T.conj(),p2)
 
 	for etap in range(1,TsP.NOutPutPts + 1 ):
 		for i in range(Nts/TsP.NOutPutPts):
@@ -263,7 +457,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 				vp_new = spsla.spsolve(IterA,Iterrhs)#,vp_old,tol=TsP.linatol)
 				vp_old = np.atleast_2d(vp_new).T
 			else:
-				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol)
+				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol, inner_product=ind2_ip)
 				vp_old = ret['xk'] 
 
 			v, p = expand_vp_dolfunc(PrP, vp=vp_old, vc=None, pc=None)
