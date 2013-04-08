@@ -13,7 +13,7 @@ import dolfin_to_nparrays as dtn
 ###
 
 
-def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_init=None,qqpq_init=None):
+def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_init,qqpq_init=None):
 	"""halfexplicit euler for the NSE in index 1 formulation
 	
 	"""
@@ -49,11 +49,17 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	# cf. preprint
 	#
 
-	IterA1 = sps.hstack([MSme,BSme.T])
-	IterA2 = sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
+	## Weights for the 'conti' eqns to balance the residuals
+	WC = 0.5
+	WCD = 0.5
+	PFac = dt/WCD
+	PFacI = WCD/dt
+
+	IterA1 = sps.hstack([MSme, PFacI*-dt*BSme.T])
+	IterA2 = WCD * sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
 	IterASp = sps.vstack([IterA1,IterA2])
 
-	IterA3 = sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
+	IterA3 = WC * sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
 		B2Sme])
 
 	IterA = sps.vstack([
@@ -109,16 +115,17 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			qq1,p1,q21 = qqpq1[:Nv,], qqpq1[Nv:-(Np-1),], qqpq1[-(Np-1):,]
 			qq2,p2,q22 = qqpq2[:Nv,], qqpq2[Nv:-(Np-1),], qqpq2[-(Np-1):,]
 
-		return np.dot(qq1.T.conj(),qq2) + 0.5*np.dot(p1.T.conj(),p2) + 0.5*np.dot(q21.T.conj(),q22)
+		return np.dot(qq1.T.conj(),qq2) + np.dot(p1.T.conj(),p2) + np.dot(q21.T.conj(),q22)
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
+	vp_old = np.copy(vp_init)
+	q1_old = vp_init[~B2BoolInv,]
+	q2_old = vp_init[B2BoolInv,]
+
 	if qqpq_init is None:
-		vp_old = np.copy(vp_init)
-		q1_old = vp_init[~B2BoolInv,]
-		q2_old = vp_init[B2BoolInv,]
 		# initial value for tq2
 		ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
 		tq2_old = spsla.spsolve(M2Sme[-(Np-1):,:], CurFv[-(Np-1):,])
@@ -128,11 +135,10 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 		qqpq_old = np.zeros((Nv+2*(Np-1),1))
 		qqpq_old[:Nv-(Np-1),] = q1_old
 		qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
-		qqpq_old[Nv:Nv+Np-1,] = -dt*vp_old[Nv:,]
+		qqpq_old[Nv:Nv+Np-1,] = PFac * vp_old[Nv:,]
 		qqpq_old[Nv+Np-1:,] = q2_old
 	else:
 		qqpq_old = qqpq_init
-		q1_old = qqpq_old[:Nv-Npc,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
@@ -142,14 +148,13 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = np.vstack([M1Sme*q1_old, B1Sme*q1_old]) \
-						+ dt*np.vstack([FvbcSme+CurFv-ConV,gdot])
+			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
+						+ dt*np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 
 			if TsP.linatol == 0:
 				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new).T
-
 			else:
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 						x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
@@ -169,7 +174,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			vc[~B2BoolInv,] = qqpq_old[:Nv-(Np-1),]
 			vc[B2BoolInv,] = qqpq_old[-(Np-1):,]
 			print np.linalg.norm(vc)
-			pc = -1.0/dt*qqpq_old[Nv:Nv+Np-1,]
+
+			pc = PFacI * qqpq_old[Nv:Nv+Np-1,]
 
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc, pdof = Pdof)
 			
@@ -188,8 +194,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 				from scipy.io import savemat
 				dname = 'IniValSmaMinN%s' % N
 				savemat(dname, { 'qqpq_old': qqpq_old })
-
-
 
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 

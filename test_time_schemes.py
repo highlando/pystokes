@@ -128,7 +128,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 					qqpq_init,PrP,TsP=TsP)
 		elif method == 1:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
-					B2BoolInv,PrP,TsP,vp_init=vp_init,qqpq_init=qqpq_init)
+					B2BoolInv,PrP,TsP,vp_init,qqpq_init=qqpq_init)
 		elif method == 3:
 			tis.halfexp_euler_ind2ra(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
 					vp_init,B2BoolInv,PrP,TsP)
