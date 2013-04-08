@@ -24,8 +24,8 @@ class TimestepParams(object):
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
-		self.ParaviewOutput = True
-		self.SaveIniVal = True
+		self.ParaviewOutput = 	False
+		self.SaveIniVal = False
 
 def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
 	"""system to solve
@@ -107,7 +107,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 		raise Warning('need "json" subdirectory for storing the data')
 	os.chdir('..')
 
-	if TsP.ParaviewOutput :
+	if TsP.ParaviewOutput:
 		os.chdir('results/')
 		for fname in glob.glob(TsP.method + '*'):
 			os.remove( fname )

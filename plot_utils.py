@@ -36,7 +36,7 @@ def convpltjsd(Jsc):
 	
 			
 	Mdict = {'HalfExpEulInd2': 'Ind2', 'HalfExpEulSmaMin': 'Ind1', 'Heei2Ra':'Ind2ra'}
-	JsFile = 'om%d' % Jsc['Omega'] + 'json/' + Mdict[Jsc['TimeIntMeth']] + 'Tol%0.0eN%d' % (Jsc['LinaTol'], Jsc['SpaceDiscParam']) + '.json'
+	JsFile = 'om%d' % Jsc['Omega'] + 'json/' + Mdict[Jsc['TimeIntMeth']] + 'Tol%1.1eN%d' % (Jsc['LinaTol'], Jsc['SpaceDiscParam']) + '.json'
 
 	f = open(JsFile, 'w')
 	f.write(json.dumps(Jsc))
