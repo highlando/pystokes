@@ -13,7 +13,7 @@ import dolfin_to_nparrays as dtn
 ###
 
 
-def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
+def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_init=None,qqpq_init=None):
 	"""halfexplicit euler for the NSE in index 1 formulation
 	
 	"""
@@ -115,23 +115,24 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	vp_old = np.copy(vp_init)
-	q1_old = vp_init[~B2BoolInv,]
-	q2_old = vp_init[B2BoolInv,]
-	# initial value for tq2
-	ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
-	tq2_old = spsla.spsolve(M2Sme[-(Np-1):,:], CurFv[-(Np-1):,])
-	#tq2_old = MLumpI2*CurFv[-(Np-1):,]
-	tq2_old = np.atleast_2d(tq2_old).T
-
-	# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
-	qqpq_old = np.zeros((Nv+2*(Np-1),1))
-	qqpq_old[:Nv-(Np-1),] = q1_old
-	qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
-	qqpq_old[Nv:Nv+Np-1,] = -dt*vp_old[Nv:,]
-	qqpq_old[Nv+Np-1:,] = q2_old
-
-	qqp_old = qqpq_old[:Nv+Np-1,]
+	if qqpq_init is None:
+		vp_old = np.copy(vp_init)
+		q1_old = vp_init[~B2BoolInv,]
+		q2_old = vp_init[B2BoolInv,]
+		# initial value for tq2
+		ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
+		tq2_old = spsla.spsolve(M2Sme[-(Np-1):,:], CurFv[-(Np-1):,])
+		#tq2_old = MLumpI2*CurFv[-(Np-1):,]
+		tq2_old = np.atleast_2d(tq2_old).T
+		# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
+		qqpq_old = np.zeros((Nv+2*(Np-1),1))
+		qqpq_old[:Nv-(Np-1),] = q1_old
+		qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
+		qqpq_old[Nv:Nv+Np-1,] = -dt*vp_old[Nv:,]
+		qqpq_old[Nv+Np-1:,] = q2_old
+	else:
+		qqpq_old = qqpq_init
+		q1_old = qqpq_old[:Nv-Npc,]
 
 	ContiRes, VelEr, PEr = [], [], []
 
@@ -183,16 +184,19 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,T
 			VelEr.append(errornorm(vCur,v))
 			PEr.append(errornorm(pCur,p))
 
+			if i + etap == 1 and TsP.SaveIniVal:
+				from scipy.io import savemat
+				dname = 'IniValSmaMinN%s' % N
+				savemat(dname, { 'qqpq_old': qqpq_old })
+
+
+
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
 		if TsP.ParaviewOutput:
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
 
-	TsP.Residuals.ContiRes.append(ContiRes)
-	TsP.Residuals.VelEr.append(VelEr)
-	TsP.Residuals.PEr.append(PEr)
-		
 	return
 
 def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):

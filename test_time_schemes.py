@@ -25,6 +25,7 @@ class TimestepParams(object):
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = True
+		self.SaveIniVal = True
 
 def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
 	"""system to solve
@@ -81,6 +82,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 	if method != 2:
 		# Rearrange the matrices and rhs
 		from smamin_utils import col_columns_atend
+		from scipy.io import loadmat
 
 		MSmeCL, BSme, B2Inds, B2BoolInv, B2BI = smartminex_tayhoomesh.get_smamin_rearrangement(N,PrP,Mc,Bc)
 
@@ -88,6 +90,15 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 		FpbcSme = fpbc
 
 		PrP.Pdof = 0 # Thats how the smamin is constructed
+
+		# inivalue 
+		dname = 'IniValSmaMinN%s' % N
+		try:
+			IniV = loadmat(dname)
+			qqpq_init = IniV['qqpq_old']
+			vp_init = None
+		except:
+			qqpq_init = None
 	
 	### Output
 	try:
@@ -114,10 +125,10 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 
 		if method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,
-					vp_init,PrP,TsP=TsP)
+					qqpq_init,PrP,TsP=TsP)
 		elif method == 1:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
-					vp_init,B2BoolInv,PrP,TsP)
+					B2BoolInv,PrP,TsP,vp_init=vp_init,qqpq_init=qqpq_init)
 		elif method == 3:
 			tis.halfexp_euler_ind2ra(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
 					vp_init,B2BoolInv,PrP,TsP)
@@ -199,7 +210,7 @@ def save_simu(TsP, PrP):
 			'VelEr': TsP.Residuals.VelEr,
 			'PEr': TsP.Residuals.PEr}
 
-	JsFile = 'json/Omeg%dTol%0.0eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
+	JsFile = 'json/Omeg%dTol%0.2eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
 
 	f = open(JsFile, 'w')
 	f.write(json.dumps(DictOfVals))
