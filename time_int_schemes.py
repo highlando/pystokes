@@ -201,6 +201,10 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			TsP.UpFiles.u_file << v, tcur
 			TsP.UpFiles.p_file << p, tcur
 
+	TsP.Residuals.ContiRes.append(ContiRes)
+	TsP.Residuals.VelEr.append(VelEr)
+	TsP.Residuals.PEr.append(PEr)
+		
 	return
 
 def halfexp_euler_ind2ra(MSme,BSme,MP,FvbcSme,FpbcSme,vp_init,B2BoolInv,PrP,TsP):
