@@ -95,7 +95,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	def smamin_ip(qqpq1, qqpq2):
 		"""inner product that 'inverts' the preconditioning
 		
-		and weights the conti residuals 
 		for better comparability of the residuals, i.e. the tolerances
 		"""
 		def _inv_prec(qqpq):
@@ -140,7 +139,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	else:
 		qqpq_old = qqpq_init
 
-	ContiRes, VelEr, PEr = [], [], []
+	ContiRes, VelEr, PEr, TolCorL = [], [], [], []
 
 	for etap in range(1,TsP.NOutPutPts +1 ):
 		for i in range(Nts/TsP.NOutPutPts):
@@ -148,9 +147,21 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
+			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B2Sme*q2_old]) \
 						+ dt*np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
+			
+			#Norm of rhs of index-1 formulation
+			NormRhs1 = np.sqrt(
+					np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
+					WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
+					WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
+
+			NormRhs2 = np.linalg.norm(np.vstack([ M1Sme*q1_old +
+				M2Sme*q2_old + dt*(FvbcSme+CurFv-ConV),
+				FpbcSmeC]))
+
+			TolCor = NormRhs2 / NormRhs1
 
 			if TsP.linatol == 0:
 				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
@@ -159,20 +170,21 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 						x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
 						inner_product=smamin_ip,
-						tol=TsP.linatol, maxiter=TsP.MaxIter)
+						tol=TolCor*TsP.linatol, maxiter=TsP.MaxIter)
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 				if q1_tq2_p_q2_new['info'] != 0:
 					print q1_tq2_p_q2_new['relresvec'][-5:]
 					raise Warning('no convergence')
 				
-				print 'Needed %d of max  %r iterations: final relres = %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1] )
+				print 'Needed %d of max  %r iterations: final relres = %e\n TolCor was %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1], TolCor )
 
 			q1_old = qqpq_old[:Nv-(Np-1),]
+			q2_old = qqpq_old[-Npc:,]
 
 			# Extract the 'actual' velocity and pressure
 			vc = np.zeros((Nv,1))
-			vc[~B2BoolInv,] = qqpq_old[:Nv-(Np-1),]
-			vc[B2BoolInv,] = qqpq_old[-(Np-1):,]
+			vc[~B2BoolInv,] = q1_old
+			vc[B2BoolInv,] = q2_old
 			print np.linalg.norm(vc)
 
 			pc = PFacI * qqpq_old[Nv:Nv+Np-1,]
@@ -189,6 +201,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			ContiRes.append(comp_cont_error(v,FpbcSme,PrP.Q))
 			VelEr.append(errornorm(vCur,v))
 			PEr.append(errornorm(pCur,p))
+			TolCorL.append(TolCor)
 
 			if i + etap == 1 and TsP.SaveIniVal:
 				from scipy.io import savemat
@@ -204,6 +217,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	TsP.Residuals.ContiRes.append(ContiRes)
 	TsP.Residuals.VelEr.append(VelEr)
 	TsP.Residuals.PEr.append(PEr)
+	TsP.TolCor.append(TolCorL)
 		
 	return
 
