@@ -152,10 +152,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 			
 			#Norm of rhs of index-1 formulation
-			NormRhsInd1 = np.sqrt(
-					np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
-					np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
-					np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
+			NormRhsInd1 = np.linalg.norm(Iterrhs)
 
 			NormRhsInd2 = np.linalg.norm(np.vstack([ M1Sme*q1_old +
 				M2Sme*q2_old + dt*(FvbcSme+CurFv-ConV),

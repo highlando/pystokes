@@ -26,9 +26,11 @@ class TimestepParams(object):
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = 	False
-		self.SaveIniVal = True
+		self.SaveIniVal = False
+		self.SaveTStps = False
+		self.UsePreTStps = False
 
-def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
+def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, UsePreTStps=False):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
