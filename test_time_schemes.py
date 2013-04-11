@@ -26,7 +26,7 @@ class TimestepParams(object):
 		self.Ml = None  #preconditioners
 		self.Mr = None
 		self.ParaviewOutput = 	False
-		self.SaveIniVal = False
+		self.SaveIniVal = True
 
 def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
 	"""system to solve

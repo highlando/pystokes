@@ -147,21 +147,21 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B2Sme*q2_old]) \
+			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
 						+ dt*np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 			
 			#Norm of rhs of index-1 formulation
-			NormRhs1 = np.sqrt(
+			NormRhsInd1 = np.sqrt(
 					np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
-					WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
-					WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
+					np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
+					np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
 
-			NormRhs2 = np.linalg.norm(np.vstack([ M1Sme*q1_old +
+			NormRhsInd2 = np.linalg.norm(np.vstack([ M1Sme*q1_old +
 				M2Sme*q2_old + dt*(FvbcSme+CurFv-ConV),
 				FpbcSmeC]))
 
-			TolCor = NormRhs2 / NormRhs1
+			TolCor = NormRhsInd2 / NormRhsInd1
 
 			if TsP.linatol == 0:
 				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
