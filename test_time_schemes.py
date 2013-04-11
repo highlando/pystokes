@@ -21,6 +21,7 @@ class TimestepParams(object):
 		self.UpFiles = UpFiles(method)
 		self.Residuals = NseResiduals()
 		self.linatol = 1e-4 # 0 for direct sparse solver
+		self.TolCor = []
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
@@ -125,7 +126,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 
 		if method == 2:
 			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,
-					qqpq_init,PrP,TsP=TsP)
+					vp_init,PrP,TsP)
 		elif method == 1:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
 					B2BoolInv,PrP,TsP,vp_init,qqpq_init=qqpq_init)
@@ -208,7 +209,8 @@ def save_simu(TsP, PrP):
 			'TimeIntMeth': TsP.method,
 			'ContiRes': TsP.Residuals.ContiRes,
 			'VelEr': TsP.Residuals.VelEr,
-			'PEr': TsP.Residuals.PEr}
+			'PEr': TsP.Residuals.PEr,
+			'TolCor': TsP.TolCor}
 
 	JsFile = 'json/Omeg%dTol%0.2eNTs%dto%dMesh%d' % (DictOfVals['Omega'], TsP.linatol, TsP.Ntslist[0], TsP.Ntslist[-1], PrP.N) +TsP.method + '.json'
 
