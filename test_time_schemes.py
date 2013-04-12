@@ -25,10 +25,12 @@ class TimestepParams(object):
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
-		self.ParaviewOutput = 	False
+		self.ParaviewOutput = False
 		self.SaveIniVal = False
+		self.SaveTStps = False
+		self.UsePreTStps = False
 
-def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, BalanceInnerP=False):
+def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, NtsList=None, LinaTol=None, MaxIter=None, UsePreTStps=None, SaveTStps=None, SaveIniVal=None ):
 	"""system to solve
 	
   	 	 du\dt - lap u + grad p = fv
@@ -65,6 +67,13 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 		TsP.tE = tE
 	if Omega is not None:
 		TsP.Omega = Omega
+	if SaveTStps is not None:
+		TsP.SaveTStps = SaveTStps
+	if UsePreTStps is not None:
+		TsP.UsePreTStps = UsePreTStps
+	if SaveIniVal is not None:
+		TsP.SaveIniVal = SaveIniVal
+
 
 	print 'Mesh parameter N = %d' % N
 	print 'Time interval [%d,%1.2f]' % (TsP.t0, TsP.tE)
@@ -98,7 +107,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 			IniV = loadmat(dname)
 			qqpq_init = IniV['qqpq_old']
 			vp_init = None
-		except:
+		except IOError:
 			qqpq_init = None
 	
 	### Output

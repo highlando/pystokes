@@ -66,6 +66,6 @@ def jsd_plot_errs(JsDict):
 		plt.title(JsDict['TimeIntMeth']+': Pressure error')
 		plt.legend()
 
-	plt.show(block=False)
+	plt.show()
 
 	return
