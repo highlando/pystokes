@@ -57,8 +57,10 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	PFac = 1#dt/WCD
 	PFacI = 1#WCD/dt
 
-	IterA1 = sps.hstack([MSme, PFacI*-dt*BSme.T])
-	IterA2 = WCD * sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
+	IterA1 = sps.hstack([sps.hstack([1.0/dt*M1Sme, M2Sme]), 
+		-PFacI*BSme.T])
+	IterA2 = WCD * sps.hstack([sps.hstack([1.0/dt*B1Sme, B2Sme]),
+		sps.csr_matrix((Np-1, Np-1))])
 	IterASp = sps.vstack([IterA1,IterA2])
 
 	IterA3 = WC * sps.hstack([sps.hstack([B1Sme,sps.csr_matrix((Np-1,2*(Np-1)))]),
@@ -135,7 +137,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 		# state vector of the smaminex system : [ q1^+, tq2^c, p^c, q2^+] 
 		qqpq_old = np.zeros((Nv+2*(Np-1),1))
 		qqpq_old[:Nv-(Np-1),] = q1_old
-		qqpq_old[Nv-(Np-1):Nv,] = dt*tq2_old 
+		qqpq_old[Nv-(Np-1):Nv,] = tq2_old 
 		qqpq_old[Nv:Nv+Np-1,] = PFac * vp_old[Nv:,]
 		qqpq_old[Nv+Np-1:,] = q2_old
 	else:
@@ -150,21 +152,24 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
-						+ dt*np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
+			Iterrhs = 1.0/dt*np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
+						+ np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 			
 			#Norm of rhs of index-1 formulation
-			NormRhsInd1 = np.sqrt(
-	 				np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
-	 				WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
-	 				WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
+			if TsP.TolCor:
+				NormRhsInd1 = np.sqrt(
+						np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
+						WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
+						WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
 
-			NormRhsInd2 = np.linalg.norm(np.vstack([ M1Sme*q1_old +
-				M2Sme*q2_old + dt*(FvbcSme+CurFv-ConV),
-				FpbcSmeC]))
+				NormRhsInd2 = np.linalg.norm(np.vstack([ 
+					1.0/dt*(M1Sme*q1_old + M2Sme*q2_old)+FvbcSme+CurFv-ConV,
+					FpbcSmeC]))
 
-			TolCor = NormRhsInd2 / NormRhsInd1
+				TolCor = NormRhsInd2 / NormRhsInd1
+			else:
+				TolCor = 1.0
 
 			if TsP.linatol == 0:
 				q1_tq2_p_q2_new = spsla.spsolve(IterA,Iterrhs) 
