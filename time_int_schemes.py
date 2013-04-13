@@ -53,8 +53,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	## Weights for the 'conti' eqns to balance the residuals
 	WC = 0.5
 	WCD = 0.5
-	PFac = dt/WCD
-	PFacI = WCD/dt
+	PFac = 1#dt/WCD
+	PFacI = 1#WCD/dt
 
 	IterA1 = sps.hstack([MSme, PFacI*-dt*BSme.T])
 	IterA2 = WCD * sps.hstack([BSme, sps.csr_matrix((Np-1, Np-1))])
@@ -145,7 +145,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	for etap in range(1,TsP.NOutPutPts +1 ):
 		for i in range(Nts/TsP.NOutPutPts):
 
-
 			ConV, CurFv = get_conv_curfv_rearr(v,PrP,tcur,B2BoolInv)
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
@@ -155,8 +154,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 			
 			#Norm of rhs of index-1 formulation
-			#NormRhsInd1 = np.linalg.norm(Iterrhs)
-
 			NormRhsInd1 = np.sqrt(
 	 				np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
 	 				WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
