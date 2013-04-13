@@ -14,6 +14,7 @@ import dolfin_to_nparrays as dtn
 ###
 
 
+
 def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_init,qqpq_init=None):
 	"""halfexplicit euler for the NSE in index 1 formulation
 	
@@ -251,8 +252,8 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	# put -dt into the pressure for balancing and symmetry
-	IterAv = sps.hstack([Mc,BTc[:,:-1]])
+	# put -1 into the pressure for symmetry
+	IterAv = sps.hstack([1.0/dt*Mc,BTc[:,:-1]])
 	IterAp = sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 
@@ -275,8 +276,8 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
-			Iterrhs = np.vstack([Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ np.vstack([dt*(fvbc+CurFv-ConV[PrP.invinds,]),
+			Iterrhs = np.vstack([1.0/dt*Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
+					+ np.vstack([fvbc+CurFv-ConV[PrP.invinds,],
 						fpbc[:-1,]])
 
 			if TsP.linatol == 0:
@@ -288,7 +289,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 				print 'Needed %d iterations -- final relres = %e' %(len(ret['relresvec']), ret['relresvec'][-1] )
 
 			vc = vp_old[:Nv,]
-			pc = -1.0/dt*vp_old[Nv:,]
+			pc = - vp_old[Nv:,]
 
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc)
 
