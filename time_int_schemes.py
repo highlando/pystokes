@@ -165,7 +165,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 						WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
 
 				NormRhsInd2 = np.linalg.norm(np.vstack([ 
-					1.0/dt*(M1Sme*q1_old + M2Sme*q2_old)+FvbcSme+CurFv-ConV,
+					(M1Sme*q1_old + M2Sme*q2_old)+dt*(FvbcSme+CurFv-ConV),
 					FpbcSmeC]))
 
 				TolCor = NormRhsInd2 / NormRhsInd1
