@@ -51,13 +51,14 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	# cf. preprint
 	#
 
+	MFac = dt
 	## Weights for the 'conti' eqns to balance the residuals
-	WC = 0.5
-	WCD = 0.5
+	WC = 1# 0.5
+	WCD = 1 #0.5
 	PFac = 1#dt/WCD
 	PFacI = 1#WCD/dt
 
-	IterA1 = sps.hstack([sps.hstack([1.0/dt*M1Sme, M2Sme]), 
+	IterA1 = MFac * sps.hstack([sps.hstack([1.0/dt*M1Sme, M2Sme]), 
 		-PFacI*BSme.T])
 	IterA2 = WCD * sps.hstack([sps.hstack([1.0/dt*B1Sme, B2Sme]),
 		sps.csr_matrix((Np-1, Np-1))])
@@ -152,8 +153,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			gdot = np.zeros((Np-1,1)) # TODO: implement \dot g
 
-			Iterrhs = 1.0/dt*np.vstack([M1Sme*q1_old, WCD*B1Sme*q1_old]) \
-						+ np.vstack([FvbcSme+CurFv-ConV,WCD*gdot])
+			Iterrhs = 1.0/dt * np.vstack([MFac * M1Sme*q1_old, WCD*B1Sme*q1_old]) \
+						+ np.vstack([MFac*(FvbcSme+CurFv-ConV),WCD*gdot])
 			Iterrhs = np.vstack([Iterrhs,FpbcSmeC])
 			
 			#Norm of rhs of index-1 formulation
@@ -248,18 +249,30 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
+	####
+	#
+	# Basic Eqn:
+	#
+	# 1/dt*M  -B.T    q+       1/dt*M*qc - K(qc) + fc
+	#    B         *  pc   =   g
+	#
+	########
 
 	Nts, t0, tE, dt, Nv, Np = init_time_stepping(PrP,TsP)
 
 	tcur = t0
+	
+	MFac = 1*dt
+	CFac = 1.0/dt
+	PFac  = -1*dt**2   #-1 for symmetry (if CFac==1)
+	PFacI = -1.0/dt**2 
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None)
 	TsP.UpFiles.u_file << v, tcur
 	TsP.UpFiles.p_file << p, tcur
 
-	# put -1 into the pressure for symmetry
-	IterAv = sps.hstack([1.0/dt*Mc,BTc[:,:-1]])
-	IterAp = sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
+	IterAv = MFac*sps.hstack([1.0/dt*Mc,PFacI*(-1)*BTc[:,:-1]])
+	IterAp = CFac*sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 
 	vp_old = vp_init
@@ -281,9 +294,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			ConV  = dtn.get_convvec(v, PrP.V)
 			CurFv = dtn.get_curfv(PrP.V, PrP.fv, PrP.invinds, tcur)
 
-			Iterrhs = np.vstack([1.0/dt*Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
-					+ np.vstack([fvbc+CurFv-ConV[PrP.invinds,],
-						fpbc[:-1,]])
+			Iterrhs = np.vstack([MFac*1.0/dt*Mc*vp_old[:Nv,],np.zeros((Np-1,1))]) \
+					+ np.vstack([MFac*(fvbc+CurFv-ConV[PrP.invinds,]),
+						CFac*fpbc[:-1,]])
 
 			if TsP.linatol == 0:
 				vp_new = spsla.spsolve(IterA,Iterrhs)#,vp_old,tol=TsP.linatol)
@@ -294,7 +307,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 				print 'Needed %d iterations -- final relres = %e' %(len(ret['relresvec']), ret['relresvec'][-1] )
 
 			vc = vp_old[:Nv,]
-			pc = - vp_old[Nv:,]
+			pc = PFacI*vp_old[Nv:,]
 
 			v, p = expand_vp_dolfunc(PrP, vp=None, vc=vc, pc=pc)
 
