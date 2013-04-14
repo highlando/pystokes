@@ -13,6 +13,20 @@ import dolfin_to_nparrays as dtn
 #                 Bv      = fpbc
 ###
 
+def mass_fem_ip(q1,q2,M):
+	"""M^-1 inner product
+
+	"""
+	return np.dot(q1.T.conj(),krypy.linsys.cg(M,q2,tol=1e-12)['xk'])
+
+def smamin_fem_ip(qqpq1,qqpq2,Mv,Mp,Nv,Npc):
+	""" M^-1 ip for the extended system
+
+	"""
+	return mass_fem_ip(qqpq1[:Nv,],qqpq2[:Nv,],Mv) + \
+			mass_fem_ip(qqpq1[Nv:-Npc,],qqpq2[Nv:-Npc,],Mp) + \
+			mass_fem_ip(qqpq1[-Npc:,],qqpq2[-Npc:,],Mp) 
+
 
 
 def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_init,qqpq_init=None):
@@ -43,10 +57,10 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	
 	#### The matrix to be solved in every time step
 	#
-	# 		M11    M12  B2'  0          q1
-	# 		M21    M22  B1'  0         dt*tq2
-	# 		B1     B2   0    0   *    -dt*p     = rhs
-	# 		B1     0    0    B2 	    q2  
+	# 		1/dt*M11    M12  -B2'  0        q1
+	# 		1/dt*M21    M22  -B1'  0        tq2
+	# 		1/dt*B1     B2   0     0   *    p     = rhs
+	# 		     B1     0    0     B2 	    q2  
 	# 						    		 
 	# cf. preprint
 	#
@@ -84,7 +98,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 			p  = qqpq[Nv:-(Np-1),]
 			p  = spsla.spsolve(B2Sme, p)
-			p  = MLumpI2*np.atleast_2d(p).T
+			p  = MLump2*np.atleast_2d(p).T
 			p  = spsla.spsolve(B2Sme.T,p)
 			p  = np.atleast_2d(p).T
 
@@ -106,7 +120,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			qq = MLump*qqpq[:Nv,] 
 			p  = qqpq[Nv:-(Np-1),]
 			p  = B2Sme.T*p
-			p  = MLump2*p
+			p  = MLumpI2*p
 			p  = B2Sme*p
 			q2 = qqpq[-(Np-1):,]
 			q2 = B2Sme*q2
@@ -119,7 +133,16 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			qq1,p1,q21 = qqpq1[:Nv,], qqpq1[Nv:-(Np-1),], qqpq1[-(Np-1):,]
 			qq2,p2,q22 = qqpq2[:Nv,], qqpq2[Nv:-(Np-1),], qqpq2[-(Np-1):,]
 
-		return np.dot(qq1.T.conj(),qq2) + np.dot(p1.T.conj(),p2) + np.dot(q21.T.conj(),q22)
+		#return np.dot(qq1.T.conj(),qq2) + np.dot(p1.T.conj(),p2) + np.dot(q21.T.conj(),q22)
+		return mass_fem_ip(qq1,qq2,MSme) + mass_fem_ip(p1,p2,MPc) + mass_fem_ip(q21,q22,MPc)
+
+	def smamin_prec_fem_ip(qqpq1,qqpq2):
+		""" M ip for the preconditioned residuals
+
+		"""
+		return np.dot(qqpq1[:Nv,].T.conj(),MSme*qqpq2[:Nv,]) + \
+				np.dot(qqpq1[Nv:-Npc,].T.conj(),MPc*qqpq2[Nv:-Npc,]) + \
+				np.dot(qqpq1[-Npc:,].T.conj(),MPc*qqpq2[-Npc:,]) 
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None, pdof=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -159,16 +182,17 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			
 			#Norm of rhs of index-1 formulation
 			if TsP.TolCorB:
-				NormRhsInd1 = np.sqrt(
-						np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
-						WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
-						WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
+				NormRhsInd1 = np.sqrt(smamin_fem_ip(Iterrhs,Iterrhs,MSme,MPc,Nv,Npc))[0][0]
+				#NormRhsInd1 = np.sqrt(
+				#		np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
+				#		WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
+				#		WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
 
 				NormRhsInd2 = np.linalg.norm(np.vstack([ 
 					(M1Sme*q1_old + M2Sme*q2_old)+dt*(FvbcSme+CurFv-ConV),
 					FpbcSmeC]))
 
-				TolCor = NormRhsInd2 / NormRhsInd1
+				TolCor = 1.0 / np.max([NormRhsInd1,1])
 			else:
 				TolCor = 1.0
 
@@ -187,7 +211,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 						x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
-						inner_product=smamin_ip,
+						inner_product=smamin_prec_fem_ip,
 						tol=TolCor*TsP.linatol, maxiter=TsP.MaxIter)
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 
