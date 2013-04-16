@@ -183,10 +183,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			#Norm of rhs of index-1 formulation
 			if TsP.TolCorB:
 				NormRhsInd1 = np.sqrt(smamin_fem_ip(Iterrhs,Iterrhs,MSme,MPc,Nv,Npc))[0][0]
-				#NormRhsInd1 = np.sqrt(
-				#		np.dot(Iterrhs[:Nv,].T.conj(), Iterrhs[:Nv,]) +
-				#		WCD * np.dot(Iterrhs[Nv:-Npc,].T.conj(),Iterrhs[Nv:-Npc,]) +
-				#		WC * np.dot(Iterrhs[-Npc:].T.conj(),Iterrhs[-Npc:,]))[0][0]
 
 				NormRhsInd2 = np.linalg.norm(np.vstack([ 
 					(M1Sme*q1_old + M2Sme*q2_old)+dt*(FvbcSme+CurFv-ConV),
@@ -270,7 +266,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 		
 	return
 
-def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
+def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	"""halfexplicit euler for the NSE in index 2 formulation
 	"""
 	####
@@ -287,9 +283,9 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	tcur = t0
 	
 	MFac = 1*dt
-	CFac = 1.0/dt
-	PFac  = -1*dt**2   #-1 for symmetry (if CFac==1)
-	PFacI = -1.0/dt**2 
+	CFac = 1.0 #/dt
+	PFac  = -1*dt   #-1 for symmetry (if CFac==1)
+	PFacI = -1.0/dt 
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -299,18 +295,31 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	IterAp = CFac*sps.hstack([Bc[:-1,:],sps.csr_matrix((Np-1,Np-1))])
 	IterA  = sps.vstack([IterAv,IterAp])
 
+	MPc = MP[:-1,:][:,:-1]
+
 	vp_old = vp_init
-	ContiRes, VelEr, PEr = [], [], []
+	ContiRes, VelEr, PEr, TolCorL = [], [], [], []
+
+	# M matrix for the minres routine
+	# M accounts for the FEM discretization
+	def _M(vp):
+		v, p = vp[:Nv,], vp[Nv:,]
+		Mv = krypy.linsys.cg(Mc,v,tol=1e-14)['xk']
+		Mp = krypy.linsys.cg(MPc,p,tol=1e-14)['xk']
+		return np.vstack([Mv,Mp])
+
+	M = spsla.LinearOperator( (Nv+Np-1,Nv+Np-1), matvec=_M, dtype=np.float32 )
 	
 	def ind2_ip(vp1,vp2):
-		"""to weight the conti eqn 
+		"""
 
-		for better comparability with ind1, 
-		where there are two conti eqns
+		for applying the fem inner product
 		"""
 		v1, v2 = vp1[:Nv,], vp2[:Nv,]
 		p1, p2 = vp1[Nv:,], vp2[Nv:,]
-		return np.dot(v1.T.conj(),v2)+np.dot(p1.T.conj(),p2)
+		#if TsP.SadPtPrec:
+			#return np.dot(v1.T.conj(),Mc*v2) + np.dot(p1.T.conj(), MPc*p2)
+		return mass_fem_ip(v1,v2,Mc) + mass_fem_ip(p1,p2,MPc)
 
 	for etap in range(1,TsP.NOutPutPts + 1 ):
 		for i in range(Nts/TsP.NOutPutPts):
@@ -326,9 +335,20 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 				vp_new = spsla.spsolve(IterA,Iterrhs)#,vp_old,tol=TsP.linatol)
 				vp_old = np.atleast_2d(vp_new).T
 			else:
-				ret = krypy.linsys.minres(IterA, Iterrhs, x0=vp_old, tol=TsP.linatol)
+
+				if TsP.TolCorB:
+					NormRhsInd2 = np.sqrt(ind2_ip(Iterrhs,Iterrhs))[0][0]
+					TolCor = 1.0 / np.max([NormRhsInd2,1])
+				else:
+					TolCor = 1.0
+
+				ret = krypy.linsys.minres(IterA, Iterrhs, 
+						x0=vp_old, tol=TolCor*TsP.linatol,
+						M=M)
 				vp_old = ret['xk'] 
+
 				print 'Needed %d iterations -- final relres = %e' %(len(ret['relresvec']), ret['relresvec'][-1] )
+				print 'TolCor was %e' % TolCor 
 
 			vc = vp_old[:Nv,]
 			pc = PFacI*vp_old[Nv:,]
@@ -345,6 +365,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			ContiRes.append(comp_cont_error(v,fpbc,PrP.Q))
 			VelEr.append(errornorm(vCur,v))
 			PEr.append(errornorm(pCur,p))
+			TolCorL.append(TolCor)
 
 		print '%d of %d time steps completed ' % (etap*Nts/TsP.NOutPutPts, Nts) 
 
@@ -355,6 +376,7 @@ def halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 	TsP.Residuals.ContiRes.append(ContiRes)
 	TsP.Residuals.VelEr.append(VelEr)
 	TsP.Residuals.PEr.append(PEr)
+	TsP.TolCor.append(TolCorL)
 		
 	return
 

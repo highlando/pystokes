@@ -135,7 +135,7 @@ def solve_stokesTimeDep(method=None, Omega=None, tE=None, Prec=None, N=None, Nts
 		TsP.Nts = CurNTs
 
 		if method == 2:
-			tis.halfexp_euler_nseind2(Mc,Ac,BTc,Bc,fvbc,fpbc,
+			tis.halfexp_euler_nseind2(Mc,MPa,Ac,BTc,Bc,fvbc,fpbc,
 					vp_init,PrP,TsP)
 		elif method == 1:
 			tis.halfexp_euler_smarminex(MSmeCL,BSme,MPa,FvbcSme,FpbcSme,
