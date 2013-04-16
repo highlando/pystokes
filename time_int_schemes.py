@@ -282,10 +282,10 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	tcur = t0
 	
-	MFac = 1*dt
-	CFac = 1.0 #/dt
-	PFac  = -1*dt   #-1 for symmetry (if CFac==1)
-	PFacI = -1.0/dt 
+	MFac = 1
+	CFac = 1 #/dt
+	PFac  = -1   #-1 for symmetry (if CFac==1)
+	PFacI = -1 
 
 	v, p   = expand_vp_dolfunc(PrP, vp=vp_init, vc=None, pc=None)
 	TsP.UpFiles.u_file << v, tcur
@@ -302,13 +302,13 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 	# M matrix for the minres routine
 	# M accounts for the FEM discretization
-	def _M(vp):
+	def _MInv(vp):
 		v, p = vp[:Nv,], vp[Nv:,]
 		Mv = krypy.linsys.cg(Mc,v,tol=1e-14)['xk']
 		Mp = krypy.linsys.cg(MPc,p,tol=1e-14)['xk']
 		return np.vstack([Mv,Mp])
 
-	M = spsla.LinearOperator( (Nv+Np-1,Nv+Np-1), matvec=_M, dtype=np.float32 )
+	MInv = spsla.LinearOperator( (Nv+Np-1,Nv+Np-1), matvec=_M, dtype=np.float32 )
 	
 	def ind2_ip(vp1,vp2):
 		"""
@@ -317,8 +317,6 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 		"""
 		v1, v2 = vp1[:Nv,], vp2[:Nv,]
 		p1, p2 = vp1[Nv:,], vp2[Nv:,]
-		#if TsP.SadPtPrec:
-			#return np.dot(v1.T.conj(),Mc*v2) + np.dot(p1.T.conj(), MPc*p2)
 		return mass_fem_ip(v1,v2,Mc) + mass_fem_ip(p1,p2,MPc)
 
 	for etap in range(1,TsP.NOutPutPts + 1 ):
@@ -334,8 +332,8 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 			if TsP.linatol == 0:
 				vp_new = spsla.spsolve(IterA,Iterrhs)#,vp_old,tol=TsP.linatol)
 				vp_old = np.atleast_2d(vp_new).T
-			else:
 
+			else:
 				if TsP.TolCorB:
 					NormRhsInd2 = np.sqrt(ind2_ip(Iterrhs,Iterrhs))[0][0]
 					TolCor = 1.0 / np.max([NormRhsInd2,1])
@@ -344,7 +342,7 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 
 				ret = krypy.linsys.minres(IterA, Iterrhs, 
 						x0=vp_old, tol=TolCor*TsP.linatol,
-						M=M)
+						M=MInv)
 				vp_old = ret['xk'] 
 
 				print 'Needed %d iterations -- final relres = %e' %(len(ret['relresvec']), ret['relresvec'][-1] )
