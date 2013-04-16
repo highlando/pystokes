@@ -65,7 +65,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 	# cf. preprint
 	#
 
-	MFac = dt
+	MFac = 1 
 	## Weights for the 'conti' eqns to balance the residuals
 	WC = 1# 0.5
 	WCD = 1 #0.5
@@ -133,7 +133,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			qq1,p1,q21 = qqpq1[:Nv,], qqpq1[Nv:-(Np-1),], qqpq1[-(Np-1):,]
 			qq2,p2,q22 = qqpq2[:Nv,], qqpq2[Nv:-(Np-1),], qqpq2[-(Np-1):,]
 
-		#return np.dot(qq1.T.conj(),qq2) + np.dot(p1.T.conj(),p2) + np.dot(q21.T.conj(),q22)
 		return mass_fem_ip(qq1,qq2,MSme) + mass_fem_ip(p1,p2,MPc) + mass_fem_ip(q21,q22,MPc)
 
 	def smamin_prec_fem_ip(qqpq1,qqpq2):
@@ -183,12 +182,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 			#Norm of rhs of index-1 formulation
 			if TsP.TolCorB:
 				NormRhsInd1 = np.sqrt(smamin_fem_ip(Iterrhs,Iterrhs,MSme,MPc,Nv,Npc))[0][0]
-
-				NormRhsInd2 = np.linalg.norm(np.vstack([ 
-					(M1Sme*q1_old + M2Sme*q2_old)+dt*(FvbcSme+CurFv-ConV),
-					FpbcSmeC]))
-
 				TolCor = 1.0 / np.max([NormRhsInd1,1])
+
 			else:
 				TolCor = 1.0
 
@@ -221,7 +216,6 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 					raise Warning('no convergence')
 				
 				print 'Needed %d of max  %r iterations: final relres = %e\n TolCor was %e' %(len(q1_tq2_p_q2_new['relresvec']), TsP.MaxIter, q1_tq2_p_q2_new['relresvec'][-1], TolCor )
-
 
 			q1_old = qqpq_old[:Nv-(Np-1),]
 			q2_old = qqpq_old[-Npc:,]
@@ -308,7 +302,7 @@ def halfexp_euler_nseind2(Mc,MP,Ac,BTc,Bc,fvbc,fpbc,vp_init,PrP,TsP):
 		Mp = krypy.linsys.cg(MPc,p,tol=1e-14)['xk']
 		return np.vstack([Mv,Mp])
 
-	MInv = spsla.LinearOperator( (Nv+Np-1,Nv+Np-1), matvec=_M, dtype=np.float32 )
+	MInv = spsla.LinearOperator( (Nv+Np-1,Nv+Np-1), matvec=_MInv, dtype=np.float32 )
 	
 	def ind2_ip(vp1,vp2):
 		"""
