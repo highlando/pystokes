@@ -67,8 +67,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 
 	MFac = 1 
 	## Weights for the 'conti' eqns to balance the residuals
-	WC = 1# 0.5
-	WCD = 1 #0.5
+	WC = 0.5
+	WCD = 0.5
 	PFac = 1#dt/WCD
 	PFacI = 1#WCD/dt
 
@@ -203,7 +203,8 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 				q1_tq2_p_q2_new = krypy.linsys.gmres(IterA, Iterrhs,
 						x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
 						inner_product=smamin_prec_fem_ip,
-						tol=TolCor*TsP.linatol, maxiter=TsP.MaxIter)
+						tol=TolCor*TsP.linatol, maxiter=TsP.MaxIter,
+						max_restarts=8)
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 
 				if TsP.SaveTStps:

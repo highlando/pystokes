@@ -25,7 +25,7 @@ class TimestepParams(object):
 		self.MaxIter = None
 		self.Ml = None  #preconditioners
 		self.Mr = None
-		self.ParaviewOutput = True
+		self.ParaviewOutput = False
 		self.SaveIniVal = False
 		self.SaveTStps = False
 		self.UsePreTStps = False
