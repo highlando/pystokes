@@ -204,7 +204,7 @@ def halfexp_euler_smarminex(MSme,BSme,MP,FvbcSme,FpbcSme,B2BoolInv,PrP,TsP,vp_in
 						x0=qqpq_old, Ml=TsP.Ml, Mr=TsP.Mr, 
 						inner_product=smamin_prec_fem_ip,
 						tol=TolCor*TsP.linatol, maxiter=TsP.MaxIter,
-						max_restarts=8)
+						max_restarts=20)
 				qqpq_old = np.atleast_2d(q1_tq2_p_q2_new['xk'])
 
 				if TsP.SaveTStps:

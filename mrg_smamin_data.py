@@ -1,5 +1,5 @@
 import plot_utils as plu
-tol = 2**(-10)
+tol = 2**(-14)
 HL = [16,32,64,128,256,512,1024]
 
 #plu.merge_json_dicts(    'json/Omeg8Tol%1.2e' % tol + 'NTs%d' % HL[0] + 'to%d' % HL[0] + 'Mesh40HalfExpEulSmaMin.json',
